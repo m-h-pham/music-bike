@@ -544,7 +544,7 @@ public class BleService extends Service {
         // Start location updates
         startLocationUpdates();
 
-        return START_STICKY;
+        return START_REDELIVER_INTENT;
     }
 
     @Override

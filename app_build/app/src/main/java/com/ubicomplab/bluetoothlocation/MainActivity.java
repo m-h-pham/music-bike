@@ -28,20 +28,17 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ListView;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.time.LocalDateTime;
@@ -49,39 +46,26 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentLinkedQueue;
-
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
     private Context this_context;
-    private String uniqueID;
     Button bleScanButton;
-    private View connectionIndicator;
-    private View labelIndicator;
+    private TextView connectionStatusText;
+    private Button deviceTypeButton;
     private boolean bleConnected;
 
-    // BLE adapter to list off BLE devices on screen.
-    private BluetoothAdapter mBluetoothAdapter;
     private BluetoothLeScanner mBluetoothLeScanner;
     private List<BluetoothDevice> mDeviceList;  // List of devices to query using the clicked device name.
-    private ArrayAdapter<String> mDeviceListAdapter;  // List of strings to display on the screen.
-    private ListView mDeviceListView;
+    private DeviceListAdapter mDeviceListAdapter; // List of strings to display on the screen.
     private List<BluetoothDevice> filteredDeviceList;
     private String searchFilter;
     private boolean currentlyScanning = false;
     private String formattedDateTime;
-
-    private ConcurrentLinkedQueue<String> locationQueue = new ConcurrentLinkedQueue<>();
-    private Thread locationFileWritingThread = null;
-
     private TextView textView;
     private BroadcastReceiver updateReceiver;
     private TextView locationIndicator;
-    private volatile boolean keepRunning = true;
     DateTimeFormatter formatter;
 
     private static final int MULTIPLE_PERMISSIONS_REQUEST_CODE = 123;
@@ -107,13 +91,10 @@ public class MainActivity extends AppCompatActivity {
         // Stop the BLE service
         Intent serviceIntent = new Intent(this, BleService.class);
         stopService(serviceIntent);
-        connectionIndicator.setBackgroundColor(Color.RED);
-        labelIndicator.setBackgroundColor(Color.BLUE);
         bleScanButton.setEnabled(true);
         bleScanButton.setText("Start Scanning");
         bleConnected = false;
     }
-
 
     public static class SensorReadingPacket {
         public int sensorIndex;
@@ -149,7 +130,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == BLE_PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
@@ -162,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private boolean checkAndRequestPermissions() {
+    private void checkAndRequestPermissions() {
         String[] permissions = new String[]{
                 Manifest.permission.ACCESS_COARSE_LOCATION,
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -189,10 +170,8 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, permissions,
                     MULTIPLE_PERMISSIONS_REQUEST_CODE);
             Log.i("permissions", "Permissions not granted!");
-            return false;
         } else {
             Log.i("permissions", "Permissions granted!");
-            return true;
         }
     }
 
@@ -203,27 +182,25 @@ public class MainActivity extends AppCompatActivity {
 
     private void filterDeviceList(String text) {
         Log.i("Filtered device list", "filtered.");
+        // Clear the current filtered device list.
         filteredDeviceList.clear();
-        List<String> filteredListNames = new ArrayList<>();
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+        // Ensure BLUETOOTH_CONNECT permission is granted.
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                                                != PackageManager.PERMISSION_GRANTED) {
             handlePermissionsNotGranted(Manifest.permission.BLUETOOTH_CONNECT);
             return;
         }
-
+        // Iterate through the master device list and add matching devices to filteredDeviceList.
         for (BluetoothDevice device : mDeviceList) {
-            if (device.getName() != null && device.getName().toLowerCase().contains(
-                    text.toLowerCase())) {
+            String deviceName = device.getName();
+            if (deviceName != null && deviceName.toLowerCase(Locale.getDefault())
+                    .contains(text.toLowerCase(Locale.getDefault()))) {
                 filteredDeviceList.add(device);
-                filteredListNames.add(device.getName());
             }
         }
-
-        mDeviceListAdapter.clear();
-        mDeviceListAdapter.addAll(filteredListNames);
+        // Notify the DeviceListAdapter that the underlying data has changed.
         mDeviceListAdapter.notifyDataSetChanged();
     }
-
 
     public boolean isBluetoothEnabled() {
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -239,55 +216,20 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
         this_context = this;
-
         checkAndRequestPermissions();
-        String testfile = getExternalFilesDir(null) + "/" + formattedDateTime + "test.csv";
-        Log.i("FILEPATH:", testfile + "");
-
-        textView = (TextView) findViewById(R.id.textView);
-
-        // Write a unique id to storage for communicating with the server.
-        File phoneIdFile = new File(getExternalFilesDir(null), "phone_id.txt");
-        if (phoneIdFile.exists()) {
-            // File already exists, do not overwrite
-            Log.i("ID File", "Already exists!");
-            StringBuilder stringBuilder = new StringBuilder();
-            try (FileInputStream fis = new FileInputStream(phoneIdFile);
-                 InputStreamReader isr = new InputStreamReader(fis);
-                 BufferedReader br = new BufferedReader(isr)) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    stringBuilder.append(line);
-                }
-                uniqueID = stringBuilder.toString();
-                textView.setText(uniqueID);
-            } catch (IOException e) {
-                Log.e("MainActivity", "Error reading from file", e);
-                textView.setText("failed to read phone ID");
-                uniqueID = "-1";
-            }
-        } else {
-            // File does not exist, create and store the unique ID
-            uniqueID = UUID.randomUUID().toString();
-            try (FileOutputStream fos = new FileOutputStream(phoneIdFile)) {
-                fos.write(uniqueID.getBytes());
-                Toast.makeText(this, "Unique ID stored in " + phoneIdFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
-                textView.setText(uniqueID);
-            } catch (IOException e) {
-                Log.e("MainActivity", "Error writing to file", e);
-                Toast.makeText(this, "Failed to write to file", Toast.LENGTH_SHORT).show();
-                textView.setText("failed to create phone ID");
-                uniqueID = "-1";
-            }
-        }
-
-        locationIndicator = findViewById(R.id.locationIndicator);
         mDeviceList = new ArrayList<>();
-        mDeviceListAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1);
-        mDeviceListView = findViewById(R.id.deviceListView);
-        mDeviceListView.setAdapter(mDeviceListAdapter);
+        RecyclerView mDeviceRecyclerView = findViewById(R.id.deviceRecyclerView);
+        mDeviceListAdapter = new DeviceListAdapter(filteredDeviceList, new DeviceListAdapter.OnItemClickListener() {
+    @Override
+    public void onItemClick(BluetoothDevice device, int position) {
+        Log.i("onItemClick", "Clicked device at position " + position);
+                stopScanning();
+                bleScanButton.setEnabled(false);
+                connectToDevice(device);
+    }});
+        mDeviceRecyclerView.setAdapter(mDeviceListAdapter);
+        mDeviceRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         EditText searchEditText = findViewById(R.id.searchEditText);
         searchFilter = "";
         searchEditText.setText(searchFilter);
@@ -315,13 +257,11 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        /* Connect to a device when clicked form the list present in the UI */
-        mDeviceListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        mDeviceRecyclerView = findViewById(R.id.deviceRecyclerView);
+        mDeviceListAdapter = new DeviceListAdapter(filteredDeviceList, new DeviceListAdapter.OnItemClickListener() {
             @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            public void onItemClick(BluetoothDevice device, int position) {
                 Log.i("onItemClick", "Clicked device at position " + position);
-                //BluetoothDevice device = mDeviceList.get(position);
-                BluetoothDevice device = filteredDeviceList.get(position);
                 if (ActivityCompat.checkSelfPermission(MainActivity.this,
                         Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
                     handlePermissionsNotGranted(Manifest.permission.BLUETOOTH_SCAN);
@@ -332,21 +272,21 @@ public class MainActivity extends AppCompatActivity {
                 connectToDevice(device);
             }
         });
+        mDeviceRecyclerView.setAdapter(mDeviceListAdapter);
+        mDeviceRecyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        // BLE adapter to list off BLE devices on screen.
+        BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
 
         // Find the button by its ID
         bleScanButton = findViewById(R.id.scanButton);
-        connectionIndicator = findViewById(R.id.connectionIndicator);
-        labelIndicator = findViewById(R.id.labelIndicator);
-        labelIndicator.setBackgroundColor(Color.BLUE);
+        connectionStatusText = findViewById(R.id.connectionStatusText);
+        connectionStatusText.setText(R.string.not_connected);
+        deviceTypeButton = findViewById(R.id.deviceTypeButton);
+        deviceTypeButton.setText(R.string.device_esp32);
         bleConnected = false;
-
         bleScanButton.setBackgroundColor(Color.GREEN);
-
-
-
         // Set the click listener
         bleScanButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -396,8 +336,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-
-
         // Initialize and register the BroadcastReceiver to update UI elements based on BLE activity.
         updateReceiver = new BroadcastReceiver() {
             @Override
@@ -410,26 +348,27 @@ public class MainActivity extends AppCompatActivity {
                     long sensorTime1 = intent.getLongExtra("sensorTime1", 0);
                     long sensorTime2 = intent.getLongExtra("sensorTime2", 0);
 
-                    // Format the readings to a fixed width of 4 characters
+                    // Format the readings to a fixed width of 4 characters, etc.
                     String formattedRear = String.format("%4d", rearReading);
                     String formattedSide = String.format("%4d", sideReading);
                     String delay = String.format("%4d", sensorTime1 - sensorTime2);
-                    textView.setText("Rear: " + formattedRear + " side: " + formattedSide + " Delay " + delay);
+                    textView.setText("Rear: " + formattedRear + " side: " + formattedSide + " Delay: " + delay);
                 } else if ("com.example.ACTION_UPDATE_LOCATION_UI".equals(action)) {
                     String locationStr = intent.getStringExtra("location");
-                    locationIndicator.setText(locationStr);
+                    // (Update or remove location info if not needed)
                 } else if ("com.example.ACTION_RECONNECTING".equals(action)) {
-                    //bleScanButton.setBackgroundColor(Color.parseColor("#FFFF00")); // sets background color to Yellow
-                    connectionIndicator.setBackgroundColor(Color.YELLOW);
+                    connectionStatusText.setText("Reconnecting...");
                     bleConnected = false;
                 } else if ("com.example.ACTION_DISCONNECTED".equals(action)) {
-                    //bleScanButton.setBackgroundColor(Color.parseColor("#FF0000")); // sets background color to red
-                    connectionIndicator.setBackgroundColor(Color.RED);
+                    connectionStatusText.setText("Not Connected");
+                    // Optionally hide or reset the device type display
+                    deviceTypeButton.setText("Device: ESP32");
                     bleScanButton.setEnabled(true);
                     bleScanButton.setText("Start Scanning");
                     bleConnected = false;
                 } else if ("com.example.ACTION_CONNECTED".equals(action)) {
-                    connectionIndicator.setBackgroundColor(Color.GREEN);
+                    connectionStatusText.setText("Connected");
+                    deviceTypeButton.setText("Device: ESP32");
                     bleScanButton.setText("Disconnect");
                     bleScanButton.setEnabled(true);
                     bleConnected = true;
@@ -454,27 +393,24 @@ public class MainActivity extends AppCompatActivity {
                     Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return;
             }
-            // Add devices to the device list to populate the UI.
+            // Add the device if it has a name and is not already in the list.
             if (device.getName() != null && !mDeviceList.contains(device)) {
                 mDeviceList.add(device);
-                mDeviceListAdapter.add(device.getName());
-                // Not sure if this is necessary.
-                mDeviceListAdapter.notifyDataSetChanged();
-                // Upon change to the device list, filter the device list for what is in search bar.
+                // Update the filtered list based on the current search filter.
                 filterDeviceList(searchFilter);
-                Log.i("onScanResult", "added and Filtered scan results");
-                for (int i = 0; i < mDeviceList.toArray().length; i++) {
+                Log.i("onScanResult", "Added and filtered scan results.");
+                // Optionally, log each device found.
+                for (int i = 0; i < mDeviceList.size(); i++) {
                     BluetoothDevice printDevice = mDeviceList.get(i);
                     Log.i("onScanResult", "Device: " + printDevice.getName() + " position: " + i);
                 }
-
             }
         }
 
         @Override
         public void onScanFailed(int errorCode) {
             super.onScanFailed(errorCode);
-            Log.i("BLEScan", "Scan Failed!");
+            Log.i("BLEScan", "Scan Failed! Error code: " + errorCode);
         }
     };
 
@@ -505,14 +441,14 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         mBluetoothLeScanner.stopScan(mScanCallback);
-        // Clear the device list and notify the adapter
+        // Clear both the complete device list and the filtered list used by the adapter.
         mDeviceList.clear();
-        mDeviceListAdapter.clear();
+        filteredDeviceList.clear();
+        // Notify the adapter to update the RecyclerView.
         mDeviceListAdapter.notifyDataSetChanged();
         bleScanButton.setText("Start Scanning");
         currentlyScanning = false;
     }
-
 
     private void connectToDevice(BluetoothDevice device) {
         if (ActivityCompat.checkSelfPermission(this,
@@ -542,5 +478,4 @@ public class MainActivity extends AppCompatActivity {
         Intent serviceIntent = new Intent(this, BleService.class);
         stopService(serviceIntent);
     }
-
 }
