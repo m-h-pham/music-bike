@@ -3,6 +3,7 @@ package com.ubicomplab.bluetoothlocation;
 import android.Manifest;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -21,6 +22,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -57,7 +59,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Context this_context;
     private String uniqueID;
-    static Button bleScanButton;
+    Button bleScanButton;
     private View connectionIndicator;
     private View labelIndicator;
     private boolean bleConnected;
@@ -232,6 +234,7 @@ public class MainActivity extends AppCompatActivity {
         return bluetoothAdapter.isEnabled();
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -438,7 +441,7 @@ public class MainActivity extends AppCompatActivity {
         updateUIFilter.addAction("com.example.ACTION_CONNECTED");
         updateUIFilter.addAction("com.example.ACTION_DISCONNECTED");
         updateUIFilter.addAction("com.example.ACTION_RECONNECTING");
-        registerReceiver(updateReceiver, updateUIFilter);
+        registerReceiver(updateReceiver, updateUIFilter, RECEIVER_EXPORTED);
 
     }
 
