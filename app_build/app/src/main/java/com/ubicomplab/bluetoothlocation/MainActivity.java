@@ -71,6 +71,11 @@ public class MainActivity extends AppCompatActivity {
     private static final int MULTIPLE_PERMISSIONS_REQUEST_CODE = 123;
     private static final int BLE_PERMISSION_REQUEST_CODE = 1;
 
+    static {
+        System.loadLibrary("fmod");
+        System.loadLibrary("fmodstudio");
+    }
+
 
     // Disconnection dialog which is used to confirm whether user intends to disconnect.
     private void showDisconnectDialog() {
@@ -145,15 +150,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkAndRequestPermissions() {
         String[] permissions = new String[]{
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN,
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            Manifest.permission.BLUETOOTH,
+            Manifest.permission.BLUETOOTH_ADMIN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.MODIFY_AUDIO_SETTINGS
         };
 
         boolean allPermissionsGranted = true;
@@ -214,6 +220,7 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        org.fmod.FMOD.init(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         this_context = this;
@@ -341,13 +348,15 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onReceive(Context context, Intent intent) {
                 String action = intent.getAction();
-
+                String deviceName = intent.getStringExtra("deviceName");
+                if (deviceName == null || deviceName.isEmpty()) {
+                    deviceName = "No Device Name"; // Fallback name
+                }
                 if ("com.example.ACTION_UPDATE_UI".equals(action)) {
                     int rearReading = intent.getIntExtra("rearReading", 0);
                     int sideReading = intent.getIntExtra("sideReading", 0);
                     long sensorTime1 = intent.getLongExtra("sensorTime1", 0);
                     long sensorTime2 = intent.getLongExtra("sensorTime2", 0);
-
                     // Format the readings to a fixed width of 4 characters, etc.
                     String formattedRear = String.format("%4d", rearReading);
                     String formattedSide = String.format("%4d", sideReading);
@@ -358,17 +367,18 @@ public class MainActivity extends AppCompatActivity {
                     // (Update or remove location info if not needed)
                 } else if ("com.example.ACTION_RECONNECTING".equals(action)) {
                     connectionStatusText.setText("Reconnecting...");
+                    deviceTypeButton.setText("Device: N/A");
                     bleConnected = false;
                 } else if ("com.example.ACTION_DISCONNECTED".equals(action)) {
                     connectionStatusText.setText("Not Connected");
                     // Optionally hide or reset the device type display
-                    deviceTypeButton.setText("Device: ESP32");
+                    deviceTypeButton.setText("Device: N/A");
                     bleScanButton.setEnabled(true);
                     bleScanButton.setText("Start Scanning");
                     bleConnected = false;
                 } else if ("com.example.ACTION_CONNECTED".equals(action)) {
                     connectionStatusText.setText("Connected");
-                    deviceTypeButton.setText("Device: ESP32");
+                    deviceTypeButton.setText("Device: " + deviceName);
                     bleScanButton.setText("Disconnect");
                     bleScanButton.setEnabled(true);
                     bleConnected = true;
@@ -471,11 +481,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // TODO moved to service!
-        //closeGatt();
         unregisterReceiver(updateReceiver);
         // Stop the BLE service
         Intent serviceIntent = new Intent(this, BleService.class);
         stopService(serviceIntent);
+        org.fmod.FMOD.close();
     }
 }

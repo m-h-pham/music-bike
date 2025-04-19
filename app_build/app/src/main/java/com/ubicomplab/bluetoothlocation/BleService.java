@@ -63,6 +63,7 @@ public class BleService extends Service {
     UUID YOUR_DESCRIPTOR_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private BluetoothGatt mBluetoothGatt;
     private PowerManager.WakeLock wakeLock;
+    private BluetoothDevice device;
 
     // Location variables
     private FusedLocationProviderClient mFusedLocationClient;
@@ -260,17 +261,18 @@ public class BleService extends Service {
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.i("BLE", "Connected to GATT server.");
-                startBLEFileWriterThreads();
-                startLocationFileWriterThread();
-                Intent disconnectIntent = new Intent("com.example.ACTION_CONNECTED");
-                sendBroadcast(disconnectIntent);
                 if (ActivityCompat.checkSelfPermission(BleService.this,
                         Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                     Log.e("BLE", "BLUETOOTH_CONNECT permission not granted");
                     stopSelf();
                     return;
                 }
-
+                startBLEFileWriterThreads();
+                startLocationFileWriterThread();
+                String deviceName = device.getName() != null ? device.getName() : "Unknown Device";
+                Intent disconnectIntent = new Intent("com.example.ACTION_CONNECTED");
+                disconnectIntent.putExtra("deviceName", deviceName);
+                sendBroadcast(disconnectIntent);
                 gatt.discoverServices();
                 boolean mtuRequested = gatt.requestMtu(24);
                 Log.i("BLE", "MTU size change requested: " + mtuRequested);
@@ -511,9 +513,9 @@ public class BleService extends Service {
 
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::BleWakeLock");
-        wakeLock.acquire();
+        wakeLock.acquire(5*60*1000L /*5 minutes*/);
 
-        BluetoothDevice device = intent.getParcelableExtra("BluetoothDevice");
+        this.device = intent.getParcelableExtra("BluetoothDevice");
         formattedDateTime = intent.getStringExtra("startTime");
 
         if (formattedDateTime == null) {
@@ -534,7 +536,7 @@ public class BleService extends Service {
 
         if (device != null) {
             if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                //handlePermissionsNotGranted(android.Manifest.permission.BLUETOOTH_CONNECT);
+                // handlePermissionsNotGranted(android.Manifest.permission.BLUETOOTH_CONNECT);
             }
             mBluetoothGatt = device.connectGatt(this, false, mGattCallback);
             // Request high priority connection to potentially reduce the connection interval
