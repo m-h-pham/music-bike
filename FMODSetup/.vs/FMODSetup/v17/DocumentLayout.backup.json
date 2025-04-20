@@ -1,9 +1,9 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\dev\\C\u002B\u002B\\FMODSetup\\",
+  "WorkspaceRootPath": "C:\\dev\\bike_app\\music-bike\\FMODSetup\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{8EBA0E3C-FE21-4986-9A34-1275555C2237}|FMODSetup\\FMODSetup.vcxproj|C:\\dev\\C\u002B\u002B\\FMODSetup\\FMODSetup\\FMODSetup.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "AbsoluteMoniker": "D:0:0:{8EBA0E3C-FE21-4986-9A34-1275555C2237}|FMODSetup\\FMODSetup.vcxproj|C:\\dev\\bike_app\\music-bike\\FMODSetup\\FMODSetup\\FMODSetup.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
       "RelativeMoniker": "D:0:0:{8EBA0E3C-FE21-4986-9A34-1275555C2237}|FMODSetup\\FMODSetup.vcxproj|solutionrelative:FMODSetup\\FMODSetup.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
     }
   ],
@@ -20,11 +20,11 @@
               "$type": "Document",
               "DocumentIndex": 0,
               "Title": "FMODSetup.cpp",
-              "DocumentMoniker": "C:\\dev\\C\u002B\u002B\\FMODSetup\\FMODSetup\\FMODSetup.cpp",
+              "DocumentMoniker": "C:\\dev\\bike_app\\music-bike\\FMODSetup\\FMODSetup\\FMODSetup.cpp",
               "RelativeDocumentMoniker": "FMODSetup\\FMODSetup.cpp",
-              "ToolTip": "C:\\dev\\C\u002B\u002B\\FMODSetup\\FMODSetup\\FMODSetup.cpp",
+              "ToolTip": "C:\\dev\\bike_app\\music-bike\\FMODSetup\\FMODSetup\\FMODSetup.cpp",
               "RelativeToolTip": "FMODSetup\\FMODSetup.cpp",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB4AAAAVAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAdAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
               "WhenOpened": "2025-04-19T23:52:05.842Z",
               "EditorCaption": ""
