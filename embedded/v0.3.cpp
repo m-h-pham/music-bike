@@ -17,7 +17,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define HALL_SENSOR_PIN    5
 #define SDA_PIN            8
 #define SCL_PIN            9
-#define ZERO_BUTTON_PIN    4  // Button for zeroing
+#define ZERO_BUTTON_PIN    7  // Button for zeroing
 
 // MPU9250 registers
 #define MPU9250_ADDRESS   0x68
@@ -42,38 +42,28 @@ const unsigned long SPEED_TIMEOUT = 3000;
 const unsigned long EVENT_DISPLAY_DURATION = 2000;
 
 // Global sensor variables (raw and filtered)
-float pitch = 0.0, roll = 0.0, yaw = 0.0;
-float pitchOffset = 0.0, rollOffset = 0.0, yawOffset = 0.0;
-int hallSensorValue = 0, lastHallSensorValue = HIGH;
-unsigned long lastTriggerTime = 0, currentTriggerTime = 0;
-float currentSpeed = 0.0;
-bool movingForward = true;
-float forwardAccel = 0.0;
-bool inJumpState = false, jumpDetected = false, dropDetected = false;
-unsigned long jumpStartTime = 0, lastJumpTime = 0, lastDropTime = 0;
-bool lastButtonState = HIGH;
-unsigned long lastDebounceTime = 0;
+static float pitch = 0.0, roll = 0.0, yaw = 0.0;
+static float pitchOffset = 0.0, rollOffset = 0.0, yawOffset = 0.0;
+static int hallSensorValue = 0, lastHallSensorValue = HIGH;
+static unsigned long lastTriggerTime = 0, currentTriggerTime = 0;
+static float currentSpeed = 0.0;
+static bool movingForward = true;
+static float forwardAccel = 0.0;
+static bool inJumpState = false, jumpDetected = false, dropDetected = false;
+static unsigned long jumpStartTime = 0, lastJumpTime = 0, lastDropTime = 0;
 
 // Sensor raw readings
-int16_t ax, ay, az;
-int16_t gx, gy, gz;
-float accelX, accelY, accelZ;
-float gyroX, gyroY, gyroZ;
+static int16_t ax, ay, az;
+static int16_t gx, gy, gz;
+static float accelX, accelY, accelZ;
+static float gyroX, gyroY, gyroZ;
+
+// High if accelerometer reset requested
+volatile bool zeroResetRequested = false;
 
 // Complementary filter variables
-unsigned long prevTime = 0;
-float alpha = 0.96;
-
-// Bluetooth global variables
-// BLE Service and Characteristic UUIDs (replace with your own 128-bit UUIDs)
-static const ble_uuid128_t GATT_SVC_UUID = BLE_UUID128_INIT(
-        0x02, 0x00, 0x12, 0xac, 0x42, 0x02, 0x78, 0xb8,
-        0xed, 0x11, 0xda, 0x46, 0x42, 0xc6, 0xbb, 0xb2
-);
-static const ble_uuid128_t GATT_CHR_UUID = BLE_UUID128_INIT(
-        0x02, 0x00, 0x12, 0xac, 0x42, 0x02, 0x78, 0xb8,
-        0xed, 0x11, 0xde, 0x46, 0x76, 0x9c, 0xaf, 0xc9
-);
+static unsigned long prevTime = 0;
+static float alpha = 0.96;
 
 static uint8_t ble_data[20]; // Buffer for BLE data
 static uint16_t conn_handle;
@@ -105,6 +95,7 @@ void SensorTask(void *pvParameters);
 void DisplayTask(void *pvParameters);
 void SerialTask(void *pvParameters);
 void BluetoothTask(void *pvParameters);
+
 
 //-------------------------- Sensor Reading Functions --------------------------
 void detectJumpAndDrop() {
@@ -272,9 +263,9 @@ void printSerialData(float p, float r, float y) {
 
 // Helper function to format sensor data for BT transmission
 String formatBluetoothData(const SensorData& data) {
-    return String("P:") + data.pitch + ",R:" + data.roll + ",Y:" + data.yaw +
-           ",S:" + data.currentSpeed + ",G:" + data.accelZ +
-           ",J:" + data.jumpDetected + ",D:" + data.dropDetected;
+    return String("") + data.pitch + " " + data.roll + " " + data.yaw +
+           " " + data.currentSpeed + " " + data.accelZ +
+           " " + data.jumpDetected + " " + data.dropDetected;
 }
 
 //-------------------------- FreeRTOS Task Functions --------------------------
@@ -385,6 +376,7 @@ void BluetoothTask(void *pvParameters) {
 
     // Start advertising your BLE service so that devices can discover it
     NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->setName("Music Bike");
     pAdvertising->start();
 
     while (true) {
@@ -401,6 +393,26 @@ void BluetoothTask(void *pvParameters) {
     }
 }
 
+// Add this task function
+void zeroResetTask(void *pvParameters) {
+    while(1) {
+        // Wait for button press (atomic read)
+        if(zeroResetRequested) {
+            zeroResetRequested = false;
+            pitchOffset = pitch;
+            rollOffset = roll;
+            yawOffset = yaw;
+            Serial.println("Reset pitch/roll/yaw.");
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));  // Prevent CPU hogging
+    }
+}
+
+// Interrupt Service Routine for accelerometer reset
+void IRAM_ATTR zeroButtonISR() {
+    zeroResetRequested = true;
+}
+
 
 void setup() {
     // Initialize Serial
@@ -409,6 +421,7 @@ void setup() {
     // Initialize Hall Effect Sensor and Zero Button
     pinMode(HALL_SENSOR_PIN, INPUT);
     pinMode(ZERO_BUTTON_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(ZERO_BUTTON_PIN), zeroButtonISR, FALLING);
 
     // Initialize I2C
     Wire.begin(SDA_PIN, SCL_PIN);
@@ -437,11 +450,12 @@ void setup() {
     display.setCursor(0, 0);
     display.println("Music Bike v0.3");
     display.println("FreeRTOS Enabled");
-    display.println("BLE: MusicBike");
+    display.println("BLE: Music Bike");
     display.display();
     delay(2000);
     // Initialize BLE
-    NimBLEDevice::init("MusicBike");
+    NimBLEDevice::init("Music Bike");
+    NimBLEDevice::setDeviceName("Music Bike");
     // Create FreeRTOS queues (add to existing queue definitions)
     displayQueue = xQueueCreate(1, sizeof(SensorData));
     serialQueue = xQueueCreate(1, sizeof(SensorData));
@@ -453,9 +467,19 @@ void setup() {
             "SensorTask",    // Task name
             4096,            // Stack size (bytes)
             NULL,            // Parameters
-            4,               // Priority (3=highest)
+            4,               // Priority (5=highest)
             NULL,            // Task handle
             1                // Core 1 (Sensor/Display/Serial tasks)
+    );
+    // Create task to read reset button for accelrometer
+    xTaskCreatePinnedToCore(
+            zeroResetTask,    // Task function
+            "ZeroReset",      // Task name
+            2048,             // Stack size
+            NULL,             // Parameters
+            5,                // Priority
+            NULL,             // Task handle
+            1                 // Core 1
     );
     xTaskCreatePinnedToCore(
             DisplayTask,
