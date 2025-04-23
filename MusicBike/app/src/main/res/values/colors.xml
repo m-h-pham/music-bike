@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="my_red">#FFB71C1C</color>
+    <color name="my_red_darker">#FF8A0000</color>
+    <color name="my_gold">#FFFFD600</color>
+    <color name="my_gold_darker">#FFC7A500</color>
+    <color name="my_red_dark_theme">#FFE57373</color>
+    <color name="my_red_darker_dark_theme">#FFB71C1C</color>
+    <color name="my_gold_dark_theme">#FFFFEA00</color>
+    <color name="my_gold_darker_dark_theme">#FFFFD600</color>
+
+</resources>
