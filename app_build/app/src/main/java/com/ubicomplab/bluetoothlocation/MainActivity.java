@@ -223,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
         org.fmod.FMOD.init(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        TextView lastPacketTextView = findViewById(R.id.lastPacketTextView);
         this_context = this;
         checkAndRequestPermissions();
         mDeviceList = new ArrayList<>();
@@ -353,15 +354,12 @@ public class MainActivity extends AppCompatActivity {
                     deviceName = "No Device Name"; // Fallback name
                 }
                 if ("com.example.ACTION_UPDATE_UI".equals(action)) {
-                    int rearReading = intent.getIntExtra("rearReading", 0);
-                    int sideReading = intent.getIntExtra("sideReading", 0);
-                    long sensorTime1 = intent.getLongExtra("sensorTime1", 0);
-                    long sensorTime2 = intent.getLongExtra("sensorTime2", 0);
-                    // Format the readings to a fixed width of 4 characters, etc.
-                    String formattedRear = String.format("%4d", rearReading);
-                    String formattedSide = String.format("%4d", sideReading);
-                    String delay = String.format("%4d", sensorTime1 - sensorTime2);
-                    textView.setText("Rear: " + formattedRear + " side: " + formattedSide + " Delay: " + delay);
+                    String lastPacket = intent.getStringExtra("lastPacket"); // Get last packet sent on bluetooth
+
+                    // Update UI to show last packet
+                    runOnUiThread(() -> {
+                        lastPacketTextView.setText(lastPacket);
+                    });
                 } else if ("com.example.ACTION_UPDATE_LOCATION_UI".equals(action)) {
                     String locationStr = intent.getStringExtra("location");
                     // (Update or remove location info if not needed)

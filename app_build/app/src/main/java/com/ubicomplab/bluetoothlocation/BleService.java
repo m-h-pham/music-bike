@@ -53,12 +53,13 @@ import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.HexFormat;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
 
 public class BleService extends Service {
     private static final String CHANNEL_ID = "SMARTHANDLEBAR_BLE_service_channel";
-    UUID MY_SERVICE_UUID = UUID.fromString("10336bc0-c8f9-4de7-b637-a68b7ef33fc9");
-    UUID MY_CHARACTERISTIC_UUID = UUID.fromString("43336bc0-c8f9-4de7-b637-a68b7ef33fc9");
+    UUID MY_SERVICE_UUID = UUID.fromString("020012ac-4202-78b8-ed11-da4642c6bbb2");
+    UUID MY_CHARACTERISTIC_UUID = UUID.fromString("020012ac-4202-78b8-ed11-de46769cafc9");
     // The fixed standard UUID for notifications.
     UUID YOUR_DESCRIPTOR_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private BluetoothGatt mBluetoothGatt;
@@ -341,6 +342,7 @@ public class BleService extends Service {
                                             BluetoothGattCharacteristic characteristic) {
             if (MY_CHARACTERISTIC_UUID.equals(characteristic.getUuid())) {
                 byte[] data = characteristic.getValue();
+                String hexData = bytesToHex(data); // Convert to readable format
                 long androidTime = System.currentTimeMillis();
 
                 int combined = data[0] & 0xFF;
@@ -383,8 +385,6 @@ public class BleService extends Service {
                 previousPacketIndex = packetIndex;
                 previouspacketTimestamp = peripheralTimestamp;
 
-
-
                 //Log.i("Received data length: " + data.length, "Sensor: " + sensorIndex + " packet " + packetIndex + " read index: " + readIndex + " at time " + androidTime + " peripheral timestamp was: " + peripheralTimestamp + " first value was rear: " + firstPayloadInt1 + " Side: " + firstPayloadInt2);
                 Log.i("BLE", "packet missed: " + packetMissed + " packet delay:  " + currentPacketDelay + " Sensor: " + sensorIndex + " packet " + packetIndex + " read index: " + readIndex + " rear queue len:" + rearPacketQueueBLE.size() + " side queue len:" + sidePacketQueueBLE.size());
                 MainActivity.SensorReadingPacket packet = new MainActivity.SensorReadingPacket(sensorIndex, packetIndex, readIndex, peripheralTimestamp, androidTime, payload);
@@ -395,6 +395,7 @@ public class BleService extends Service {
                 }
 
                 Intent intent = new Intent("com.example.ACTION_UPDATE_UI");
+                intent.putExtra("lastPacket", hexData); // Add last packet string to Intent
                 intent.putExtra("rearReading", firstPayloadInt1);
                 intent.putExtra("sideReading", firstPayloadInt2);
                 intent.putExtra("sensorTime1", sensorTime1);
@@ -403,6 +404,15 @@ public class BleService extends Service {
             }
         }
     };
+
+    // Hex conversion helper method to display last packet
+    private static String bytesToHex(byte[] bytes) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return HexFormat.of().formatHex(bytes);
+        } else {
+            return "SDK TOO LOW";
+        }
+    }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
