@@ -395,16 +395,16 @@ void BluetoothTask(void *pvParameters) {
 
 // Add this task function
 void zeroResetTask(void *pvParameters) {
-    while(1) {
+    while (true) {
         // Wait for button press (atomic read)
-        if(zeroResetRequested) {
+        if (zeroResetRequested) {
             zeroResetRequested = false;
             pitchOffset = pitch;
             rollOffset = roll;
             yawOffset = yaw;
             Serial.println("Reset pitch/roll/yaw.");
         }
-        vTaskDelay(pdMS_TO_TICKS(10));  // Prevent CPU hogging
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
@@ -471,7 +471,7 @@ void setup() {
             NULL,            // Task handle
             1                // Core 1 (Sensor/Display/Serial tasks)
     );
-    // Create task to read reset button for accelrometer
+    // Create task to read reset button for accelerometer
     xTaskCreatePinnedToCore(
             zeroResetTask,    // Task function
             "ZeroReset",      // Task name
