@@ -53,16 +53,18 @@ import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.HexFormat;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
 
 public class BleService extends Service {
     private static final String CHANNEL_ID = "SMARTHANDLEBAR_BLE_service_channel";
-    UUID MY_SERVICE_UUID = UUID.fromString("10336bc0-c8f9-4de7-b637-a68b7ef33fc9");
-    UUID MY_CHARACTERISTIC_UUID = UUID.fromString("43336bc0-c8f9-4de7-b637-a68b7ef33fc9");
+    UUID MY_SERVICE_UUID = UUID.fromString("020012ac-4202-78b8-ed11-da4642c6bbb2");
+    UUID MY_CHARACTERISTIC_UUID = UUID.fromString("020012ac-4202-78b8-ed11-de46769cafc9");
     // The fixed standard UUID for notifications.
     UUID YOUR_DESCRIPTOR_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private BluetoothGatt mBluetoothGatt;
     private PowerManager.WakeLock wakeLock;
+    private BluetoothDevice device;
 
     // Location variables
     private FusedLocationProviderClient mFusedLocationClient;
@@ -260,17 +262,18 @@ public class BleService extends Service {
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.i("BLE", "Connected to GATT server.");
-                startBLEFileWriterThreads();
-                startLocationFileWriterThread();
-                Intent disconnectIntent = new Intent("com.example.ACTION_CONNECTED");
-                sendBroadcast(disconnectIntent);
                 if (ActivityCompat.checkSelfPermission(BleService.this,
                         Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                     Log.e("BLE", "BLUETOOTH_CONNECT permission not granted");
                     stopSelf();
                     return;
                 }
-
+                startBLEFileWriterThreads();
+                startLocationFileWriterThread();
+                String deviceName = device.getName() != null ? device.getName() : "Unknown Device";
+                Intent disconnectIntent = new Intent("com.example.ACTION_CONNECTED");
+                disconnectIntent.putExtra("deviceName", deviceName);
+                sendBroadcast(disconnectIntent);
                 gatt.discoverServices();
                 boolean mtuRequested = gatt.requestMtu(24);
                 Log.i("BLE", "MTU size change requested: " + mtuRequested);
@@ -339,6 +342,7 @@ public class BleService extends Service {
                                             BluetoothGattCharacteristic characteristic) {
             if (MY_CHARACTERISTIC_UUID.equals(characteristic.getUuid())) {
                 byte[] data = characteristic.getValue();
+                String hexData = bytesToHex(data); // Convert to readable format
                 long androidTime = System.currentTimeMillis();
 
                 int combined = data[0] & 0xFF;
@@ -381,8 +385,6 @@ public class BleService extends Service {
                 previousPacketIndex = packetIndex;
                 previouspacketTimestamp = peripheralTimestamp;
 
-
-
                 //Log.i("Received data length: " + data.length, "Sensor: " + sensorIndex + " packet " + packetIndex + " read index: " + readIndex + " at time " + androidTime + " peripheral timestamp was: " + peripheralTimestamp + " first value was rear: " + firstPayloadInt1 + " Side: " + firstPayloadInt2);
                 Log.i("BLE", "packet missed: " + packetMissed + " packet delay:  " + currentPacketDelay + " Sensor: " + sensorIndex + " packet " + packetIndex + " read index: " + readIndex + " rear queue len:" + rearPacketQueueBLE.size() + " side queue len:" + sidePacketQueueBLE.size());
                 MainActivity.SensorReadingPacket packet = new MainActivity.SensorReadingPacket(sensorIndex, packetIndex, readIndex, peripheralTimestamp, androidTime, payload);
@@ -393,6 +395,7 @@ public class BleService extends Service {
                 }
 
                 Intent intent = new Intent("com.example.ACTION_UPDATE_UI");
+                intent.putExtra("lastPacket", hexData); // Add last packet string to Intent
                 intent.putExtra("rearReading", firstPayloadInt1);
                 intent.putExtra("sideReading", firstPayloadInt2);
                 intent.putExtra("sensorTime1", sensorTime1);
@@ -401,6 +404,15 @@ public class BleService extends Service {
             }
         }
     };
+
+    // Hex conversion helper method to display last packet
+    private static String bytesToHex(byte[] bytes) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return HexFormat.of().formatHex(bytes);
+        } else {
+            return "SDK TOO LOW";
+        }
+    }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -511,9 +523,9 @@ public class BleService extends Service {
 
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::BleWakeLock");
-        wakeLock.acquire();
+        wakeLock.acquire(5*60*1000L /*5 minutes*/);
 
-        BluetoothDevice device = intent.getParcelableExtra("BluetoothDevice");
+        this.device = intent.getParcelableExtra("BluetoothDevice");
         formattedDateTime = intent.getStringExtra("startTime");
 
         if (formattedDateTime == null) {
@@ -534,7 +546,7 @@ public class BleService extends Service {
 
         if (device != null) {
             if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                //handlePermissionsNotGranted(android.Manifest.permission.BLUETOOTH_CONNECT);
+                // handlePermissionsNotGranted(android.Manifest.permission.BLUETOOTH_CONNECT);
             }
             mBluetoothGatt = device.connectGatt(this, false, mGattCallback);
             // Request high priority connection to potentially reduce the connection interval
