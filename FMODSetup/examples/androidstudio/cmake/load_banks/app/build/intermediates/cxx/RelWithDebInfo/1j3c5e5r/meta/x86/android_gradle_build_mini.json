@@ -1,0 +1,36 @@
+{
+  "buildFiles": [
+    "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\src\\main\\cpp\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx\\RelWithDebInfo\\1j3c5e5r\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx\\RelWithDebInfo\\1j3c5e5r\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "example-RelWithDebInfo-x86": {
+      "artifactName": "example",
+      "buildCommandComponents": [
+        "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe",
+        "-C",
+        "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx\\RelWithDebInfo\\1j3c5e5r\\x86",
+        "example"
+      ],
+      "abi": "x86",
+      "output": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\1j3c5e5r\\obj\\x86\\libexample.so",
+      "runtimeFiles": [
+        "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\core\\lib\\x86\\libfmod.so",
+        "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\lib\\x86\\libfmodstudio.so"
+      ]
+    }
+  }
+}

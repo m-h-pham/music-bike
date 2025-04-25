@@ -1,0 +1,175 @@
+{
+  "abi": "X86",
+  "info": {
+    "abi": "X86",
+    "bitness": 32,
+    "deprecated": false,
+    "default": true
+  },
+  "cxxBuildFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx\\RelWithDebInfo\\1j3c5e5r\\x86",
+  "soFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\1j3c5e5r\\obj\\x86",
+  "soRepublishFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cmake\\release\\obj\\x86",
+  "abiPlatformVersion": 16,
+  "cmake": {
+    "effectiveConfiguration": {
+      "inheritEnvironments": [],
+      "variables": []
+    }
+  },
+  "variant": {
+    "buildSystemArgumentList": [
+      "-DFMOD_API_ROOT\u003dC:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api",
+      "-DFMOD_LIB_SUFFIX\u003d"
+    ],
+    "cFlagsList": [],
+    "cppFlagsList": [
+      "-std\u003dc++11",
+      "-fno-exceptions",
+      "-fno-rtti"
+    ],
+    "variantName": "release",
+    "soFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\1j3c5e5r\\obj",
+    "soRepublishFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cmake\\release\\obj",
+    "cxxBuildFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx\\RelWithDebInfo\\1j3c5e5r",
+    "intermediatesFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\1j3c5e5r",
+    "isDebuggableEnabled": false,
+    "validAbiList": [
+      "ARMEABI_V7A",
+      "ARM64_V8A",
+      "X86",
+      "X86_64"
+    ],
+    "buildTargetSet": [],
+    "implicitBuildTargetSet": [],
+    "cmakeSettingsConfiguration": "android-gradle-plugin-predetermined-name",
+    "module": {
+      "cxxFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx",
+      "intermediatesBaseFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates",
+      "intermediatesFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cxx",
+      "gradleModulePathName": ":app",
+      "moduleRootFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app",
+      "moduleBuildFile": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build.gradle",
+      "makeFile": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\src\\main\\cpp\\CMakeLists.txt",
+      "buildSystem": "CMAKE",
+      "ndkFolder": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529",
+      "ndkVersion": "21.4.7075529",
+      "ndkSupportedAbiList": [
+        "ARMEABI_V7A",
+        "ARM64_V8A",
+        "X86",
+        "X86_64"
+      ],
+      "ndkDefaultAbiList": [
+        "ARMEABI_V7A",
+        "ARM64_V8A",
+        "X86",
+        "X86_64"
+      ],
+      "ndkDefaultStl": "LIBCXX_STATIC",
+      "ndkMetaPlatforms": {
+        "min": 16,
+        "max": 30,
+        "aliases": {
+          "20": 19,
+          "25": 24,
+          "J": 16,
+          "J-MR1": 17,
+          "J-MR2": 18,
+          "K": 19,
+          "L": 21,
+          "L-MR1": 22,
+          "M": 23,
+          "N": 24,
+          "N-MR1": 24,
+          "O": 26,
+          "O-MR1": 27,
+          "P": 28,
+          "Q": 29,
+          "R": 30
+        }
+      },
+      "ndkMetaAbiList": [
+        {
+          "abi": "ARMEABI_V7A",
+          "bitness": 32,
+          "deprecated": false,
+          "default": true
+        },
+        {
+          "abi": "ARM64_V8A",
+          "bitness": 64,
+          "deprecated": false,
+          "default": true
+        },
+        {
+          "abi": "X86",
+          "bitness": 32,
+          "deprecated": false,
+          "default": true
+        },
+        {
+          "abi": "X86_64",
+          "bitness": 64,
+          "deprecated": false,
+          "default": true
+        }
+      ],
+      "cmakeToolchainFile": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\build\\cmake\\android.toolchain.cmake",
+      "cmake": {
+        "isValidCmakeAvailable": true,
+        "cmakeExe": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\cmake.exe",
+        "minimumCmakeVersion": "3.10.2",
+        "ninjaExe": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe"
+      },
+      "stlSharedObjectMap": {
+        "LIBCXX_SHARED": {
+          "ARMEABI_V7A": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\lib\\arm-linux-androideabi\\libc++_shared.so",
+          "ARM64_V8A": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\lib\\aarch64-linux-android\\libc++_shared.so",
+          "X86": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\lib\\i686-linux-android\\libc++_shared.so",
+          "X86_64": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\lib\\x86_64-linux-android\\libc++_shared.so"
+        },
+        "LIBCXX_STATIC": {},
+        "NONE": {},
+        "SYSTEM": {}
+      },
+      "project": {
+        "rootBuildGradleFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks",
+        "sdkFolder": "C:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk",
+        "isBuildOnlyTargetAbiEnabled": true,
+        "isCmakeBuildCohabitationEnabled": false,
+        "isPrefabEnabled": false
+      },
+      "nativeBuildOutputLevel": "QUIET"
+    },
+    "prefabClassPathFileCollection": [],
+    "prefabPackageDirectoryListFileCollection": [],
+    "stlType": "c++_static",
+    "optimizationTag": "RelWithDebInfo"
+  },
+  "buildSettings": {
+    "environmentVariables": []
+  },
+  "prefabFolder": "C:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx\\RelWithDebInfo\\1j3c5e5r\\prefab\\x86",
+  "isActiveAbi": true,
+  "fullConfigurationHash": "1j3c5e5r2x104u2c5406e4l1a242b6r3x4r6j6v1u83r5b2i734817521u3p64",
+  "configurationArguments": [
+    "-HC:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\src\\main\\cpp",
+    "-DCMAKE_SYSTEM_NAME\u003dAndroid",
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS\u003dON",
+    "-DCMAKE_SYSTEM_VERSION\u003d16",
+    "-DANDROID_PLATFORM\u003dandroid-16",
+    "-DANDROID_ABI\u003dx86",
+    "-DCMAKE_ANDROID_ARCH_ABI\u003dx86",
+    "-DANDROID_NDK\u003dC:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529",
+    "-DCMAKE_ANDROID_NDK\u003dC:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529",
+    "-DCMAKE_TOOLCHAIN_FILE\u003dC:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\build\\cmake\\android.toolchain.cmake",
+    "-DCMAKE_MAKE_PROGRAM\u003dC:\\Users\\ethdi\\AppData\\Local\\Android\\Sdk\\cmake\\3.10.2.4988404\\bin\\ninja.exe",
+    "-DCMAKE_CXX_FLAGS\u003d-std\u003dc++11 -fno-exceptions -fno-rtti",
+    "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY\u003dC:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\1j3c5e5r\\obj\\x86",
+    "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY\u003dC:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\1j3c5e5r\\obj\\x86",
+    "-DCMAKE_BUILD_TYPE\u003dRelWithDebInfo",
+    "-BC:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api\\studio\\examples\\androidstudio\\cmake\\load_banks\\app\\.cxx\\RelWithDebInfo\\1j3c5e5r\\x86",
+    "-GNinja",
+    "-DFMOD_API_ROOT\u003dC:\\Users\\ethdi\\Downloads\\fmodstudioapi20307android\\fmodstudioapi20307android\\api"
+  ]
+}

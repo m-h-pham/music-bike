@@ -1,0 +1,1 @@
+C:\Users\ethdi\Downloads\fmodstudioapi20307android\fmodstudioapi20307android\api\studio\examples\androidstudio\cmake\load_banks\app\src\main\cpp\CMakeLists.txt

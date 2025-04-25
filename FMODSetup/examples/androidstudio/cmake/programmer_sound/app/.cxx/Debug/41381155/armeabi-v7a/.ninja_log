@@ -1,0 +1,5 @@
+# ninja log v5
+6	402	767167279	CMakeFiles/example.dir/programmer_sound.cpp.o	a9cb730bec75131f
+11	416	767167279	CMakeFiles/example.dir/common.cpp.o	6f116020d9235457
+1	723	767167279	CMakeFiles/example.dir/common_platform.cpp.o	18ec25679d4b682d
+724	834	767167279	C:/Users/ethdi/Downloads/fmodstudioapi20307android/fmodstudioapi20307android/api/studio/examples/androidstudio/cmake/programmer_sound/app/build/intermediates/cxx/Debug/41381155/obj/armeabi-v7a/libexample.so	ecfb9dd1664ea007

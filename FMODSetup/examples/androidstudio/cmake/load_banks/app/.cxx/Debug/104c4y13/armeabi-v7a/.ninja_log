@@ -1,0 +1,6 @@
+# ninja log v5
+1	398	767166594	CMakeFiles/example.dir/common.cpp.o	fbeac8ee39500e62
+11	480	767166594	CMakeFiles/example.dir/load_banks.cpp.o	68d138621fbc0c0
+6	903	767166594	CMakeFiles/example.dir/common_platform.cpp.o	855835710e93db2e
+903	1081	767166594	C:/Users/ethdi/Downloads/fmodstudioapi20307android/fmodstudioapi20307android/api/studio/examples/androidstudio/cmake/load_banks/app/build/intermediates/cxx/Debug/104c4y13/obj/armeabi-v7a/libexample.so	4718885f615d33e
+4	230	767167011	C:/Users/ethdi/Downloads/fmodstudioapi20307android/fmodstudioapi20307android/api/studio/examples/androidstudio/cmake/load_banks/app/build/intermediates/cxx/Debug/104c4y13/obj/armeabi-v7a/libexample.so	4718885f615d33e

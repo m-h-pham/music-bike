@@ -1,0 +1,3 @@
+C:/Users/ethdi/Downloads/fmodstudioapi20307android/fmodstudioapi20307android/api/studio/examples/androidstudio/cmake/load_banks/app/.cxx/Debug/104c4y13/x86/CMakeFiles/example.dir
+C:/Users/ethdi/Downloads/fmodstudioapi20307android/fmodstudioapi20307android/api/studio/examples/androidstudio/cmake/load_banks/app/.cxx/Debug/104c4y13/x86/CMakeFiles/edit_cache.dir
+C:/Users/ethdi/Downloads/fmodstudioapi20307android/fmodstudioapi20307android/api/studio/examples/androidstudio/cmake/load_banks/app/.cxx/Debug/104c4y13/x86/CMakeFiles/rebuild_cache.dir

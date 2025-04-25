@@ -1,21 +1,103 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".ui.fragments.SensorsFragment"> <TextView
-    android:id="@+id/txtSensorData"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="Sensor Data: ---"
-    android:textAppearance="@style/TextAppearance.AppCompat.Large"
-    app:layout_constraintBottom_toBottomOf="parent"
-    app:layout_constraintEnd_toEndOf="parent"
-    app:layout_constraintStart_toStartOf="parent"
-    app:layout_constraintTop_toTopOf="parent"
-    tools:text="Sensor Data: Speed 15, Tilt 5" />
+    android:layout_height="match_parent">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
-    
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Embedded Data Section -->
+        <TextView
+            android:id="@+id/embedded_section_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Embedded Sensor Data"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:paddingBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/embedded_pitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pitch: --"/>
+
+        <TextView
+            android:id="@+id/embedded_roll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Roll: --"/>
+
+        <TextView
+            android:id="@+id/embedded_yaw"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Yaw: --"/>
+
+        <TextView
+            android:id="@+id/embedded_gforce"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="G-Force: --"/>
+
+        <TextView
+            android:id="@+id/jump_detected"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Jump Detected: No"/>
+
+        <TextView
+            android:id="@+id/drop_detected"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Drop Detected: No"/>
+
+        <TextView
+            android:id="@+id/wheel_speed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Wheel Speed: 0 RPM"/>
+
+        <!-- Spacer -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="24dp" />
+
+        <!-- Phone Data Section -->
+        <TextView
+            android:id="@+id/phone_section_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Phone Sensor Data"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:paddingBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/phone_pitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pitch: --"/>
+
+        <TextView
+            android:id="@+id/phone_roll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Roll: --"/>
+
+        <TextView
+            android:id="@+id/phone_yaw"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Yaw: --"/>
+
+        <TextView
+            android:id="@+id/phone_gforce"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="G-Force: --"/>
+
+    </LinearLayout>
+</ScrollView>

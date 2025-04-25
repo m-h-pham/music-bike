@@ -1,0 +1,1 @@
+C:\Users\ethdi\Downloads\fmodstudioapi20307android\fmodstudioapi20307android\api\studio\examples\androidstudio\cmake\load_banks\app\build\intermediates\cxx\Debug\104c4y13\obj\x86

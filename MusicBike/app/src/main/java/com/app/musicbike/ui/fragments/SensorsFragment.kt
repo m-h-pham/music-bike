@@ -7,7 +7,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import com.app.musicbike.databinding.FragmentSensorsBinding // Import generated binding
 
-class SensorsFragment : Fragment() {
+class   SensorsFragment : Fragment() {
 
     private var _binding: FragmentSensorsBinding? = null
     private val binding get() = _binding!!

@@ -1,0 +1,7 @@
+Executable : C:\Users\ethdi\AppData\Local\Android\Sdk\cmake\3.10.2.4988404\bin\ninja.exe
+arguments : 
+-C
+C:\Users\ethdi\Downloads\fmodstudioapi20307android\fmodstudioapi20307android\api\studio\examples\androidstudio\cmake\event_parameter\app\.cxx\Debug\4o44q3iq\armeabi-v7a
+example
+jvmArgs : 
+

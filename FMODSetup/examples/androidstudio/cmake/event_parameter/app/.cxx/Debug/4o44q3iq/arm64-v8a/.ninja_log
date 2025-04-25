@@ -1,0 +1,5 @@
+# ninja log v5
+5	391	767244554	CMakeFiles/example.dir/event_parameter.cpp.o	f30aecf0089591fc
+10	402	767244554	CMakeFiles/example.dir/common.cpp.o	d7bd7bc6ca314dd0
+0	712	767244554	CMakeFiles/example.dir/common_platform.cpp.o	3736f5aed2b4a23d
+713	883	767244554	C:/Users/ethdi/Downloads/fmodstudioapi20307android/fmodstudioapi20307android/api/studio/examples/androidstudio/cmake/event_parameter/app/build/intermediates/cxx/Debug/4o44q3iq/obj/arm64-v8a/libexample.so	d4f7617e7250ff72
