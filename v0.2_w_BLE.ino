@@ -46,6 +46,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define PITCH_CHARACTERISTIC_UUID    "726c4b96-bc56-47d2-95a1-a6c49cce3a1f"
 #define ROLL_CHARACTERISTIC_UUID     "a1e929e3-5a2e-4418-806a-c50ab877d126"
 #define YAW_CHARACTERISTIC_UUID      "cd6fc0f8-089a-490e-8e36-74af84977c7b"
+#define GFORCE_CHARACTERISTIC_UUID   "a6210f30-654f-32ea-9e37-432a639fb38e"
 #define EVENT_CHARACTERISTIC_UUID    "26205d71-58d1-45e6-9ad1-1931cd7343c3" //  (For Jump/Drop)
 // Add more if needed (e.g., G-force, Direction)
 
@@ -55,6 +56,7 @@ BLECharacteristic* pSpeedCharacteristic = NULL;
 BLECharacteristic* pPitchCharacteristic = NULL;
 BLECharacteristic* pRollCharacteristic = NULL;
 BLECharacteristic* pYawCharacteristic = NULL;
+BLECharacteristic* pGForceCharacteristic = NULL;
 BLECharacteristic* pEventCharacteristic = NULL; // For jump/drop
 
 bool deviceConnected = false; // BLE: Track connection status
@@ -67,6 +69,11 @@ float yaw = 0.0;
 float pitchOffset = 0.0;
 float rollOffset = 0.0;
 float yawOffset = 0.0;
+float q0 = 1.0f, q1 = 0, q2 = 0, q3 = 0;  // quaternion estimate
+float twoKp = 2.0f * 0.5f;  // Mahony Kp gain (tune between 0.5–2.0)
+float twoKi = 2.0f * 0.0f;  // Mahony Ki gain (usually zero or very small)
+unsigned long lastQuatTime = 0;
+float integralFBx = 0, integralFBy = 0, integralFBz = 0;
 int hallSensorValue = 0;
 int lastHallSensorValue = HIGH;
 unsigned long lastDisplayUpdate = 0;
@@ -103,6 +110,7 @@ int16_t ax, ay, az;
 int16_t gx, gy, gz;
 float accelX, accelY, accelZ;
 float gyroX, gyroY, gyroZ;
+float gForce;
 
 // Complementary filter variables
 unsigned long prevTime = 0;
@@ -201,13 +209,19 @@ void setup() {
                        );
   pYawCharacteristic->addDescriptor(new BLE2902());
 
+  pGForceCharacteristic = pService->createCharacteristic(
+                          GFORCE_CHARACTERISTIC_UUID,
+                          BLECharacteristic::PROPERTY_READ |
+                          BLECharacteristic::PROPERTY_NOTIFY
+                        );
+  pGForceCharacteristic->addDescriptor(new BLE2902());
+
   pEventCharacteristic = pService->createCharacteristic(
                          EVENT_CHARACTERISTIC_UUID,
                          BLECharacteristic::PROPERTY_READ |
                          BLECharacteristic::PROPERTY_NOTIFY
                        );
   pEventCharacteristic->addDescriptor(new BLE2902());
-
 
   pService->start(); // Start the service
 
@@ -301,7 +315,7 @@ void loop() {
   // Update display at defined interval
   if (currentMillis - lastDisplayUpdate >= displayUpdateInterval) {
     lastDisplayUpdate = currentMillis;
-    updateDisplay(zeroedPitch, zeroedRoll, zeroedYaw);
+    updateDisplay(zeroedPitch, zeroedRoll, zeroedYaw, gForce);
   }
 
   // Update serial output at defined interval
@@ -432,23 +446,84 @@ void readMPU9250Data() {
 }
 
 void calculateAngles() {
-  float accelPitch = atan2(accelY, sqrt(accelX * accelX + accelZ * accelZ)) * 180.0 / PI;
-  float accelRoll = atan2(-accelX, accelZ) * 180.0 / PI;
-  unsigned long currentTime = millis();
-  float dt = (currentTime - prevTime) / 1000.0;
-  prevTime = currentTime;
-  float gyroPitch = pitch + gyroX * dt;
-  float gyroRoll = roll + gyroY * dt;
-  float gyroYaw = yaw + gyroZ * dt;
-  pitch = alpha * gyroPitch + (1.0 - alpha) * accelPitch;
-  roll = alpha * gyroRoll + (1.0 - alpha) * accelRoll;
-  yaw = gyroYaw;
+  // 1) compute dt
+  unsigned long now = millis();
+  float dt = (now - lastQuatTime) * 0.001f;
+  lastQuatTime = now;
+
+  // 2) Mahony quaternion update (gyro in rad/s, accel in g's)
+  float ax = accelX, ay = accelY, az = accelZ;
+  float gx = gyroX * PI/180.0f,  // deg/s → rad/s
+        gy = gyroY * PI/180.0f,
+        gz = gyroZ * PI/180.0f;
+
+  // normalize accel measurement
+  float norm = sqrt(ax*ax + ay*ay + az*az);
+  if (norm == 0.0f) return;    // invalid data
+  ax /= norm; ay /= norm; az /= norm;
+
+  // estimated gravity direction (from quaternion)
+  float vx = 2.0f*(q1*q3 - q0*q2);
+  float vy = 2.0f*(q0*q1 + q2*q3);
+  float vz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
+
+  // error = cross(accel, gravity)
+  float ex = (ay*vz - az*vy);
+  float ey = (az*vx - ax*vz);
+  float ez = (ax*vy - ay*vx);
+
+  // integral feedback
+  if (twoKi > 0.0f) {
+    integralFBx += twoKi * ex * dt;
+    integralFBy += twoKi * ey * dt;
+    integralFBz += twoKi * ez * dt;
+    gx += integralFBx;
+    gy += integralFBy;
+    gz += integralFBz;
+  }
+
+  // proportional feedback
+  gx += twoKp * ex;
+  gy += twoKp * ey;
+  gz += twoKp * ez;
+
+  // integrate rate of change of quaternion
+  float qDot0 = -q1*gx - q2*gy - q3*gz;
+  float qDot1 =  q0*gx + q2*gz - q3*gy;
+  float qDot2 =  q0*gy - q1*gz + q3*gx;
+  float qDot3 =  q0*gz + q1*gy - q2*gx;
+
+  q0 += qDot0 * (0.5f*dt);
+  q1 += qDot1 * (0.5f*dt);
+  q2 += qDot2 * (0.5f*dt);
+  q3 += qDot3 * (0.5f*dt);
+
+  // normalize quaternion
+  norm = sqrt(q0*q0 + q1*q1 + q2*q2 + q3*q3);
+  q0 /= norm; q1 /= norm; q2 /= norm; q3 /= norm;
+
+  // 3) extract Euler for your display/use
+  pitch = atan2(2*(q0*q1 + q2*q3), 1 - 2*(q1*q1+q2*q2)) * 180.0/PI;
+  roll  = asin (2*(q0*q2 - q3*q1))                  * 180.0/PI;
+  yaw   = atan2(2*(q0*q3 + q1*q2), 1 - 2*(q2*q2+q3*q3)) * 180.0/PI;
   if (yaw < 0) yaw += 360;
-  if (yaw >= 360) yaw -= 360;
+
+  // 4) compute true vertical g-force
+  // q0…q3 is current unit quaternion (body→world)
+  float gravityVectorX = 2.0f * (q1 * q3 - q0 * q2);
+  float gravityVectorY = 2.0f * (q0 * q1 + q2 * q3);
+  float gravityVectorZ = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3;
+
+  // Project raw accel onto gravity vector → vertical accel in G’s --
+  // accelX/Y/Z are in G’s from sensor
+  float verticalAcceleration = accelX * gravityVectorX + accelY * gravityVectorY + accelZ * gravityVectorZ;
+
+  // Vertical acceleration in G's
+  gForce = verticalAcceleration;
 }
 
 // --- Display and Serial Functions (Modified for BLE indicator) ---
-void updateDisplay(float p, float r, float y) {
+void updateDisplay(float p, float r, float y, float gForce) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
@@ -462,7 +537,7 @@ void updateDisplay(float p, float r, float y) {
   // G-force at the top left
   display.setCursor(0, 0);
   display.print("G:");
-  display.print(accelZ, 2); // Display G-force with 2 decimal places
+  display.print(gForce, 2); // Display G-force with 2 decimal places
 
   // Jump and drop indicators
   display.setCursor(0, 10);
@@ -506,7 +581,7 @@ void printSerialData(float p, float r, float y) {
   Serial.print("Speed: "); Serial.print(currentSpeed, 2); Serial.println(" km/h");
   Serial.print("Direction: "); Serial.println(movingForward ? "Forward" : "Reverse");
   Serial.print("Hall Sensor: "); Serial.println(hallSensorValue == LOW ? "Magnet Detected" : "No Magnet");
-  Serial.print("G-Force: "); Serial.println(accelZ, 2);
+  Serial.print("G-Force: "); Serial.println(gForce, 2);
   Serial.print("Vertical Accel: "); Serial.println(accelZ - 1.0, 2);
   Serial.print("Forward Accel: "); Serial.println(forwardAccel, 2);
   if (jumpDetected) Serial.println("JUMP DETECTED!");
