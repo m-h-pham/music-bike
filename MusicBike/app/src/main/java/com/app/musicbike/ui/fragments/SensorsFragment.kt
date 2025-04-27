@@ -1,172 +1,171 @@
 package com.app.musicbike.ui.fragments
 
 import android.os.Bundle
+import android.util.Log // Import Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
-import android.content.Context
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
-import kotlin.math.*
 import androidx.fragment.app.Fragment
-import com.app.musicbike.R
-import com.app.musicbike.databinding.FragmentSensorsBinding // Import generated binding
+import com.app.musicbike.services.BleService // Import BleService
+import com.app.musicbike.databinding.FragmentSensorsBinding
+import com.app.musicbike.ui.activities.MainActivity // Import MainActivity
+import java.util.Locale // Import Locale for formatting
 
-class SensorsFragment : Fragment(), SensorEventListener {
-    // Embedded sensor views
-    private lateinit var embeddedPitch: TextView
-    private lateinit var embeddedRoll: TextView
-    private lateinit var embeddedYaw: TextView
-    private lateinit var embeddedGForce: TextView
-    private lateinit var jumpDetected: TextView
-    private lateinit var dropDetected: TextView
-    private lateinit var wheelSpeed: TextView
+class SensorsFragment : Fragment() {
 
-    // Phone sensor views
-    private lateinit var phonePitch: TextView
-    private lateinit var phoneRoll: TextView
-    private lateinit var phoneYaw: TextView
-    private lateinit var phoneGForce: TextView
-
+    private val TAG = "SensorsFragment" // Add TAG
     private var _binding: FragmentSensorsBinding? = null
     private val binding get() = _binding!!
 
-    // Phone accelerometer variables
-    private lateinit var sensorManager: SensorManager
-    private var accelerometer: Sensor? = null
-    // Accelerometer variables for yaw/magnetometer
-    // Add to top of SensorsFragment class
-    private var magnetometer: Sensor? = null
-    private val lastAccelerometerReading = FloatArray(3)
-    private val lastMagnetometerReading = FloatArray(3)
-    private var hasAccelerometerData = false
-    private var hasMagnetometerData = false
-
+    // Hold reference to the service
+    private var bleService: BleService? = null
+    private var hasAttemptedObservationSetup = false // Flag
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentSensorsBinding.inflate(inflater, container, false)
+        Log.d(TAG, "onCreateView")
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        sensorManager = requireContext().getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        // Embedded
-        embeddedPitch = view.findViewById(R.id.embedded_pitch)
-        embeddedRoll = view.findViewById(R.id.embedded_roll)
-        embeddedYaw = view.findViewById(R.id.embedded_yaw)
-        embeddedGForce = view.findViewById(R.id.embedded_gforce)
-        jumpDetected = view.findViewById(R.id.jump_detected)
-        dropDetected = view.findViewById(R.id.drop_detected)
-        wheelSpeed = view.findViewById(R.id.wheel_speed)
-
-        // Phone
-        phonePitch = view.findViewById(R.id.phone_pitch)
-        phoneRoll = view.findViewById(R.id.phone_roll)
-        phoneYaw = view.findViewById(R.id.phone_yaw)
-        phoneGForce = view.findViewById(R.id.phone_gforce)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        accelerometer?.also { sensor ->
-            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
-        }
-        magnetometer?.also { sensor -> // Add this block
-            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+        Log.d(TAG, "onViewCreated")
+        // Try to get service if activity already has it (e.g., on configuration change)
+        if ((activity as? MainActivity)?.isServiceConnected == true) {
+            onServiceReady() // Attempt setup early if possible
+        } else {
+            binding.txtSensorData.text = "Waiting for connection..." // Initial text
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        sensorManager.unregisterListener(this)
+    // Called by MainActivity when the BleService is connected and ready
+    fun onServiceReady() {
+        Log.d(TAG, "onServiceReady called by Activity.")
+        bleService = (activity as? MainActivity)?.getBleServiceInstance()
+        if (bleService != null && !hasAttemptedObservationSetup) {
+            Log.d(TAG, "Service is ready, setting up observers.")
+            observeSensorData() // Setup observers now
+            hasAttemptedObservationSetup = true
+        } else if (bleService == null) {
+            Log.e(TAG, "onServiceReady called, but failed to get service instance!")
+            binding.txtSensorData.text = "Error getting service"
+        } else {
+            Log.d(TAG, "onServiceReady called, but observers already set up.")
+        }
     }
 
-    override fun onSensorChanged(event: SensorEvent) {
-        when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER -> {
-                System.arraycopy(event.values, 0, lastAccelerometerReading, 0, event.values.size)
-                hasAccelerometerData = true
+    // --- NEW: Function to observe sensor data LiveData ---
+    private fun observeSensorData() {
+        if (bleService == null) {
+            Log.e(TAG, "observeSensorData: BleService is null.")
+            return
+        }
+        Log.d(TAG, "Setting up observers for Sensor LiveData")
+
+        // Observe Speed
+        bleService?.speed?.observe(viewLifecycleOwner) { speed ->
+            updateSensorDisplay() // Update the display whenever any value changes
+        }
+        // Observe Pitch
+        bleService?.pitch?.observe(viewLifecycleOwner) { pitch ->
+            updateSensorDisplay()
+        }
+        // Observe Roll
+        bleService?.roll?.observe(viewLifecycleOwner) { roll ->
+            updateSensorDisplay()
+        }
+        // Observe Yaw
+        bleService?.yaw?.observe(viewLifecycleOwner) { yaw ->
+            updateSensorDisplay()
+        }
+        // Observe Event
+        bleService?.lastEvent?.observe(viewLifecycleOwner) { event ->
+            updateSensorDisplay()
+        }
+        bleService?.imuDirection?.observe(viewLifecycleOwner) { direction ->
+            updateSensorDisplay()
+        }
+        bleService?.hallDirection?.observe(viewLifecycleOwner) { direction ->
+            updateSensorDisplay()
+        }
+        bleService?.imuSpeedState?.observe(viewLifecycleOwner) { state ->
+            updateSensorDisplay()
+        }
+        bleService?.gForce?.observe(viewLifecycleOwner) { gForce ->
+            updateSensorDisplay()
+        }
+
+        // Observe connection status to show appropriate message
+        bleService?.connectionStatus?.observe(viewLifecycleOwner) { status ->
+            if (status != "Ready" && status != "Connected" && status != "Services Discovered" && status != "Discovering Services...") {
+                // Show disconnected/error status if not actively connected/ready
+                binding.txtSensorData.text = "Status: $status"
+            } else if (status == "Ready"){
+                // If status becomes Ready, update display with current values
+                updateSensorDisplay()
             }
-            Sensor.TYPE_MAGNETIC_FIELD -> { // Add this case
-                System.arraycopy(event.values, 0, lastMagnetometerReading, 0, event.values.size)
-                hasMagnetometerData = true
-            }
-        }
-
-        if (hasAccelerometerData && hasMagnetometerData) {
-            val rotationMatrix = FloatArray(9)
-            if (SensorManager.getRotationMatrix(
-                    rotationMatrix,
-                    null,
-                    lastAccelerometerReading,
-                    lastMagnetometerReading
-                )
-            ) {
-                val orientationAngles = FloatArray(3)
-                SensorManager.getOrientation(rotationMatrix, orientationAngles)
-
-                val pitch = Math.toDegrees(orientationAngles[1].toDouble()).toFloat()
-                val roll = Math.toDegrees(orientationAngles[2].toDouble()).toFloat()
-                val yaw = Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
-
-                // Keep existing g-force calculation
-                val ax = lastAccelerometerReading[0]
-                val ay = lastAccelerometerReading[1]
-                val az = lastAccelerometerReading[2]
-                val gForce = sqrt(ax * ax + ay * ay + az * az) / SensorManager.GRAVITY_EARTH
-
-                updatePhoneSensors(pitch, roll, yaw, gForce)
-            }
         }
     }
 
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Not needed
-    }
-
-    fun updateEmbeddedSensors(
-        pitch: Float,
-        roll: Float,
-        yaw: Float,
-        gForce: Float,
-        jump: Boolean,
-        drop: Boolean,
-        speed: Int
-    ) {
-        activity?.runOnUiThread {
-            embeddedPitch.text = "Pitch: $pitch°"
-            embeddedRoll.text = "Roll: $roll°"
-            embeddedYaw.text = "Yaw: $yaw°"
-            embeddedGForce.text = "G-Force: ${"%.2f".format(gForce)}g"
-            jumpDetected.text = "Jump Detected: ${if (jump) "Yes" else "No"}"
-            dropDetected.text = "Drop Detected: ${if (drop) "Yes" else "No"}"
-            wheelSpeed.text = "Wheel Speed: ${speed} RPM"
+    private fun updateSensorDisplay() {
+        // Get the latest values from LiveData
+        val speed = bleService?.speed?.value ?: 0.0f
+        val pitch = bleService?.pitch?.value ?: 0.0f
+        val roll = bleService?.roll?.value ?: 0.0f
+        val yaw = bleService?.yaw?.value ?: 0.0f
+        val lastEvent = bleService?.lastEvent?.value ?: "NONE"
+        val imuDir = if (bleService?.imuDirection?.value == 1) "Fwd" else "Rev"
+        val hallDir = if (bleService?.hallDirection?.value == 1) "Fwd" else "Rev"
+        val speedState = when (bleService?.imuSpeedState?.value) {
+            0 -> "Stop/Slow"
+            1 -> "Medium"
+            2 -> "Fast"
+            else -> "N/A"
         }
-    }
+        // --- Add this line to get G-Force ---
+        val gForce = bleService?.gForce?.value ?: 0.0f
+        // --- End G-Force addition ---
 
-    // Call this to update phone sensor data
-    private fun updatePhoneSensors(pitch: Float, roll: Float, yaw: Float, gForce: Float) {
-        activity?.runOnUiThread {
-            phonePitch.text = "Pitch: ${"%.2f".format(pitch)}°"
-            phoneRoll.text = "Roll: ${"%.2f".format(roll)}°"
-            phoneYaw.text = "Yaw: ${"%.2f".format(yaw)}°"
-            phoneGForce.text = "G-Force: ${"%.2f".format(gForce)}g"
-        }
+        // Format the string to display (add G-Force)
+        val displayText = String.format(Locale.US,
+            "Speed: %.1f km/h | G-Force: %.2fg\n" + // Added G-Force here
+                    "Pitch: %.1f | Roll: %.1f | Yaw: %.1f\n" +
+                    "IMU Dir: %s | Hall Dir: %s\n" +
+                    "IMU Spd State: %s\n" +
+                    "Event: %s",
+            speed, gForce, // Add gForce to format arguments
+            pitch, roll, yaw,
+            imuDir, hallDir,
+            speedState,
+            lastEvent
+        )
+
+        binding.txtSensorData.text = displayText // Set the text
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+        hasAttemptedObservationSetup = false // Reset flag
+        Log.d(TAG, "Fragment view destroyed")
+    }
+
+    // Optional: Try to get service reference again when fragment resumes
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "onResume called.")
+        // If service is ready but observation hasn't started (e.g., fragment recreated)
+        if (bleService == null && (activity as? MainActivity)?.isServiceConnected == true) {
+            Log.d(TAG, "onResume: Service connected, attempting to set up observers.")
+            onServiceReady()
+        } else if (bleService != null) {
+            // Service already known, ensure UI reflects current state
+            updateSensorDisplay()
+        } else {
+            binding.txtSensorData.text = "Waiting for connection..."
+        }
     }
 }
-    
