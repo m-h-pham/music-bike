@@ -6,15 +6,16 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
-import android.util.Log // Make sure Log is imported
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.viewpager2.widget.ViewPager2
+import com.app.musicbike.databinding.ActivityMainBinding
 import com.app.musicbike.services.BleService
 import com.app.musicbike.ui.adapter.ViewPagerAdapter
-import com.app.musicbike.databinding.ActivityMainBinding
 import com.app.musicbike.ui.fragments.DevicesFragment
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity" // Keep TAG for logging
@@ -50,6 +51,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    companion object {
+        init {
+            try {
+                Log.d("FMOD", "Attempting to load FMOD library...")
+                System.loadLibrary("fmod")
+                System.loadLibrary("fmodstudio")
+                System.loadLibrary("musicbike") // YOUR native library!
+                Log.d("FMOD", "FMOD library loaded successfully.")
+            } catch (e: UnsatisfiedLinkError) {
+                Log.e("FMOD", "Failed to load FMOD library.", e)
+            }
+        }
+    }
+
+    private external fun startFMODPlayback(masterBankPath: String, stringsBankPath: String)
+
+    private external fun setFMODParameter(paramName: String, value: Float)
+
+    private fun copyAssetToInternalStorage(assetName: String): String {
+        val file = File(filesDir, assetName)
+        if (!file.exists()) {
+            assets.open(assetName).use { inputStream ->
+                file.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        }
+        return file.absolutePath
+    }
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -58,6 +90,18 @@ class MainActivity : AppCompatActivity() {
         setupViewPager()
         Log.d(TAG, "onCreate: Calling bindToService...") // Log before binding
         bindToService()
+
+        org.fmod.FMOD.init(this);
+        val result = org.fmod.FMOD.checkInit()
+        Log.d("FMOD", "FMOD init result: $result")
+
+
+        val masterBankPath = copyAssetToInternalStorage("Master.bank")
+        val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
+
+        Log.d(TAG, "Calling startFMODPlayback() with bank paths")
+        startFMODPlayback(masterBankPath, stringsBankPath)
+        setFMODParameter("Wheel Speed", 30.0f)
     }
 
     fun getBleServiceInstance(): BleService? {
@@ -113,5 +157,7 @@ class MainActivity : AppCompatActivity() {
             bound = false
             isServiceConnected = false
         }
+
+        org.fmod.FMOD.close();
     }
 }

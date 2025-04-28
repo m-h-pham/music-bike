@@ -15,6 +15,11 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        externalNativeBuild {
+            cmake {
+                cppFlags += ""
+            }
+        }
     }
 
     buildTypes {
@@ -38,6 +43,12 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 }
 
 dependencies {
@@ -47,6 +58,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+    implementation(files("libs/fmod.jar"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
