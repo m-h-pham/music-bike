@@ -102,12 +102,9 @@ Java_com_app_musicbike_ui_activities_MainActivity_startFMODPlayback(JNIEnv *env,
     }
 
     if (eventInstance) {
-        result = eventInstance->start();
-        if (!checkFMODError(result, "start")) {
-            return;
-        }
-        LOGI("Playing event:/Bike");
+        LOGI("FMOD event:/Bike loaded and ready. Waiting for user to start playback.");
     }
+
 
     if (!isRunning) {
         isRunning = true;
@@ -139,6 +136,60 @@ Java_com_app_musicbike_ui_activities_MainActivity_setFMODParameter(JNIEnv *env, 
     }
 
     env->ReleaseStringUTFChars(paramName, paramNameCStr);
+}
+
+JNIEXPORT void JNICALL
+Java_com_app_musicbike_ui_activities_MainActivity_toggleFMODPlayback(JNIEnv *, jobject) {
+    bool isPlaying = false;
+    FMOD_STUDIO_PLAYBACK_STATE state;
+    if (eventInstance->getPlaybackState(&state) == FMOD_OK) {
+        isPlaying = (state == FMOD_STUDIO_PLAYBACK_PLAYING);
+    }
+
+    if (!isPlaying) {
+        eventInstance->start(); // cold start if it hasn't played yet
+    } else {
+        bool isPaused = false;
+        eventInstance->getPaused(&isPaused);
+        eventInstance->setPaused(!isPaused);
+    }
+
+}
+
+JNIEXPORT void JNICALL
+Java_com_app_musicbike_ui_activities_MainActivity_playFMODEvent(JNIEnv *, jobject) {
+    std::lock_guard<std::mutex> lock(fmodMutex);
+
+    if (!eventInstance) {
+        LOGE("Cannot play event: eventInstance is null.");
+        return;
+    }
+
+    FMOD_RESULT result = eventInstance->start();
+    if (result != FMOD_OK) {
+        LOGE("Failed to start FMOD event: %s", FMOD_ErrorString(result));
+    } else {
+        LOGI("FMOD event started (play).");
+    }
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_app_musicbike_ui_activities_MainActivity_isFMODPaused(JNIEnv *, jobject) {
+    std::lock_guard<std::mutex> lock(fmodMutex);
+
+    if (!eventInstance) {
+        LOGE("isFMODPaused: eventInstance is null.");
+        return JNI_TRUE; // Assume paused if unknown
+    }
+
+    bool isPaused = true;
+    FMOD_RESULT result = eventInstance->getPaused(&isPaused);
+    if (result != FMOD_OK) {
+        LOGE("getPaused failed: %s", FMOD_ErrorString(result));
+        return JNI_TRUE; // Assume paused on error
+    }
+
+    return isPaused ? JNI_TRUE : JNI_FALSE;
 }
 
 }

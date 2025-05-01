@@ -65,9 +65,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private external fun startFMODPlayback(masterBankPath: String, stringsBankPath: String)
+    external fun startFMODPlayback(masterBankPath: String, stringsBankPath: String)
 
-    private external fun setFMODParameter(paramName: String, value: Float)
+    external fun setFMODParameter(paramName: String, value: Float)
+
+    external fun toggleFMODPlayback()
+
+    external fun playFMODEvent()
+
+    external fun isFMODPaused(): Boolean
+
 
     private fun copyAssetToInternalStorage(assetName: String): String {
         val file = File(filesDir, assetName)
@@ -100,8 +107,9 @@ class MainActivity : AppCompatActivity() {
         val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
 
         Log.d(TAG, "Calling startFMODPlayback() with bank paths")
+
         startFMODPlayback(masterBankPath, stringsBankPath)
-        setFMODParameter("Wheel Speed", 30.0f)
+        setFMODParameter("Wheel Speed", 0.0f)
     }
 
     fun getBleServiceInstance(): BleService? {
