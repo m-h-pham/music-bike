@@ -2,32 +2,30 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".ui.fragments.MusicFragment">
+    android:layout_height="match_parent">
 
+    <!-- Playback Toggle -->
     <Button
         android:id="@+id/toggleButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="48dp"
-        android:text="Play/Pause"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:text="Play"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="24dp" />
 
+    <!-- Wheel Speed -->
     <TextView
         android:id="@+id/wheelSpeedLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Wheel Speed: 0"
-        android:textAppearance="@style/TextAppearance.AppCompat.Medium"
         app:layout_constraintTop_toBottomOf="@id/toggleButton"
         app:layout_constraintStart_toStartOf="parent"
         android:layout_marginTop="24dp"
-        android:layout_marginStart="16dp" />
-
+        android:layout_marginStart="16dp"/>
 
     <SeekBar
         android:id="@+id/wheelSpeedSeekBar"
@@ -39,6 +37,48 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginTop="8dp" />
+        android:layout_marginTop="8dp"/>
 
+    <!-- Pitch -->
+    <TextView
+        android:id="@+id/pitchLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Pitch: 0"
+        app:layout_constraintTop_toBottomOf="@id/wheelSpeedSeekBar"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="24dp"
+        android:layout_marginStart="16dp"/>
+
+    <SeekBar
+        android:id="@+id/pitchSeekBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:max="90"
+        app:layout_constraintTop_toBottomOf="@id/pitchLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"/>
+
+    <!-- Event -->
+    <TextView
+        android:id="@+id/eventLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Event:"
+        app:layout_constraintTop_toBottomOf="@id/pitchSeekBar"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="24dp"
+        android:layout_marginStart="16dp"/>
+
+    <Spinner
+        android:id="@+id/eventSpinner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@id/eventLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="16dp"/>
 </androidx.constraintlayout.widget.ConstraintLayout>
