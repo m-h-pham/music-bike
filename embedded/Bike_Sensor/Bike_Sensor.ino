@@ -191,7 +191,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
 void imuTask(void *pvParameters) {
     Serial.println("imuTask started");
     TickType_t xLastWakeTime;
-    const TickType_t xFrequency = pdMS_TO_TICKS(20); // Run ~50Hz
+    const TickType_t xFrequency = pdMS_TO_TICKS(10); // Run ~100Hz
 
     // Initialize MPU9250 communication here
     Wire.beginTransmission(MPU9250_ADDRESS); Wire.write(0x6B); Wire.write(0); Wire.endTransmission(true); // Wake up
@@ -411,7 +411,7 @@ void hallSensorTask(void *pvParameters) {
 void processingTask(void *pvParameters) {
     Serial.println("processingTask started");
     TickType_t xLastWakeTime;
-    const TickType_t xFrequency = pdMS_TO_TICKS(30); // Run ~33Hz
+    const TickType_t xFrequency = pdMS_TO_TICKS(15); // Run ~66Hz
 
     xLastWakeTime = xTaskGetTickCount();
 
@@ -575,7 +575,7 @@ void processingTask(void *pvParameters) {
 void bleTask(void *pvParameters) {
     Serial.println("bleTask started");
     TickType_t xLastWakeTime;
-    const TickType_t xFrequency = pdMS_TO_TICKS(100); // Notify ~10Hz
+    const TickType_t xFrequency = pdMS_TO_TICKS(25); // Notify ~40Hz
 
     xLastWakeTime = xTaskGetTickCount();
     bool prevJumpDetected = false;
@@ -828,7 +828,7 @@ void setup() {
     xTaskCreatePinnedToCore(imuTask, "IMUTask", 4096, NULL, 5, &imuTaskHandle, 1);
     xTaskCreatePinnedToCore(hallSensorTask, "HallTask", 4096, NULL, 4, &hallSensorTaskHandle, 1);
     xTaskCreatePinnedToCore(processingTask, "ProcessingTask", 4096, NULL, 3, &processingTaskHandle, 1);
-    xTaskCreatePinnedToCore(bleTask, "BLETask", 4096, NULL, 2, &bleTaskHandle, 1);
+    xTaskCreatePinnedToCore(bleTask, "BLETask", 4096, NULL, 2, &bleTaskHandle, 0); // Run BLE on other core
     xTaskCreatePinnedToCore(displayTask, "DisplayTask", 4096, NULL, 1, &displayTaskHandle, 1);
 
     Serial.println("Tasks created. Initialization complete!");

@@ -1,117 +1,173 @@
 package com.app.musicbike.ui.fragments
 
 import android.os.Bundle
-import android.util.Log // Import Log
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.SeekBar
 import androidx.fragment.app.Fragment
-import com.app.musicbike.services.BleService // Import BleService
 import com.app.musicbike.databinding.FragmentSensorsBinding
-import com.app.musicbike.ui.activities.MainActivity // Import MainActivity
-import java.util.Locale // Import Locale for formatting
+import com.app.musicbike.services.BleService
+import com.app.musicbike.ui.activities.MainActivity
+import com.google.android.material.snackbar.Snackbar
+import java.io.File
+import java.io.FileOutputStream
+import java.util.Locale
 
 class SensorsFragment : Fragment() {
 
-    private val TAG = "SensorsFragment" // Add TAG
+    private val TAG = "SensorsFragment"
     private var _binding: FragmentSensorsBinding? = null
     private val binding get() = _binding!!
 
-    // Hold reference to the service
     private var bleService: BleService? = null
-    private var hasAttemptedObservationSetup = false // Flag
+    private var hasAttemptedObservationSetup = false
+
+    // Recording support
+    private var isRecording = false
+    private var recordDurationSec = 0.0f
+    private val recordBuffer = mutableListOf<String>()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentSensorsBinding.inflate(inflater, container, false)
-        Log.d(TAG, "onCreateView")
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        Log.d(TAG, "onViewCreated")
-        // Try to get service if activity already has it (e.g., on configuration change)
+
+        // Initialize the slider (0..20 steps → 0.0..2.0s in 0.1s increments)
+        binding.seekRecordingDuration.max = 20
+        binding.seekRecordingDuration.progress = 0
+        binding.txtDurationValue.text = "0.0"
+
+        // Add listener to update duration value
+        binding.seekRecordingDuration.setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    seekBar: SeekBar,
+                    progress: Int,
+                    fromUser: Boolean
+                ) {
+                    // convert 0..20 to 0.0..2.0 seconds in 0.1 increments
+                    val seconds = progress * 0.1f
+                    binding.txtDurationValue.text =
+                        String.format(Locale.US, "%.1f", seconds)
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar) { /* no-op */ }
+                override fun onStopTrackingTouch(seekBar: SeekBar) { /* no-op */ }
+            }
+        )
+
+        binding.seekRecordingDuration.setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
+                    recordDurationSec = progress * 0.1f
+                    binding.txtDurationValue.text =
+                        String.format(Locale.US, "%.1f", recordDurationSec)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar) {}
+                override fun onStopTrackingTouch(sb: SeekBar) {}
+            }
+        )
+
+        // Record button
+        binding.btnStartRecording.setOnClickListener {
+            val filename = binding.editFilename.text?.toString()?.trim().orEmpty()
+            if (filename.isEmpty()) {
+                Snackbar.make(binding.root, "Filename is required", Snackbar.LENGTH_SHORT)
+                    .show()
+                return@setOnClickListener
+            }
+            startRecording(filename)
+        }
+
+        // Try to hook up BLE as before
         if ((activity as? MainActivity)?.isServiceConnected == true) {
-            onServiceReady() // Attempt setup early if possible
+            onServiceReady()
         } else {
-            binding.txtSensorData.text = "Waiting for connection..." // Initial text
+            binding.txtSensorData.text = "Waiting for connection..."
         }
     }
 
-    // Called by MainActivity when the BleService is connected and ready
-    fun onServiceReady() {
-        Log.d(TAG, "onServiceReady called by Activity.")
-        bleService = (activity as? MainActivity)?.getBleServiceInstance()
-        if (bleService != null && !hasAttemptedObservationSetup) {
-            Log.d(TAG, "Service is ready, setting up observers.")
-            observeSensorData() // Setup observers now
-            hasAttemptedObservationSetup = true
-        } else if (bleService == null) {
-            Log.e(TAG, "onServiceReady called, but failed to get service instance!")
-            binding.txtSensorData.text = "Error getting service"
-        } else {
-            Log.d(TAG, "onServiceReady called, but observers already set up.")
-        }
-    }
-
-    // --- NEW: Function to observe sensor data LiveData ---
-    private fun observeSensorData() {
-        if (bleService == null) {
-            Log.e(TAG, "observeSensorData: BleService is null.")
+    private fun startRecording(filename: String) {
+        if (recordDurationSec <= 0f) {
+            Snackbar.make(binding.root, "Set a duration > 0", Snackbar.LENGTH_SHORT).show()
             return
         }
-        Log.d(TAG, "Setting up observers for Sensor LiveData")
+        recordBuffer.clear()
+        isRecording = true
+        binding.btnStartRecording.text = "Recording..."
+        binding.btnStartRecording.isEnabled = false
 
-        // Observe Speed
-        bleService?.speed?.observe(viewLifecycleOwner) { speed ->
-            updateSensorDisplay() // Update the display whenever any value changes
-        }
-        // Observe Pitch
-        bleService?.pitch?.observe(viewLifecycleOwner) { pitch ->
-            updateSensorDisplay()
-        }
-        // Observe Roll
-        bleService?.roll?.observe(viewLifecycleOwner) { roll ->
-            updateSensorDisplay()
-        }
-        // Observe Yaw
-        bleService?.yaw?.observe(viewLifecycleOwner) { yaw ->
-            updateSensorDisplay()
-        }
-        // Observe Event
-        bleService?.lastEvent?.observe(viewLifecycleOwner) { event ->
-            updateSensorDisplay()
-        }
-        bleService?.imuDirection?.observe(viewLifecycleOwner) { direction ->
-            updateSensorDisplay()
-        }
-        bleService?.hallDirection?.observe(viewLifecycleOwner) { direction ->
-            updateSensorDisplay()
-        }
-        bleService?.imuSpeedState?.observe(viewLifecycleOwner) { state ->
-            updateSensorDisplay()
-        }
-        bleService?.gForce?.observe(viewLifecycleOwner) { gForce ->
-            updateSensorDisplay()
-        }
+        // Schedule stop
+        mainHandler.postDelayed({
+            stopRecording(filename)
+        }, (recordDurationSec * 1000).toLong())
+    }
 
-        // Observe connection status to show appropriate message
-        bleService?.connectionStatus?.observe(viewLifecycleOwner) { status ->
-            if (status != "Ready" && status != "Connected" && status != "Services Discovered" && status != "Discovering Services...") {
-                // Show disconnected/error status if not actively connected/ready
-                binding.txtSensorData.text = "Status: $status"
-            } else if (status == "Ready"){
-                // If status becomes Ready, update display with current values
-                updateSensorDisplay()
+    private fun stopRecording(filename: String) {
+        isRecording = false
+        binding.btnStartRecording.text = "Start Recording"
+        binding.btnStartRecording.isEnabled = true
+
+        try {
+            val outFile = File(requireContext().filesDir, "$filename.txt")
+            FileOutputStream(outFile).use { fos ->
+                recordBuffer.forEach { line ->
+                    fos.write((line + "\n").toByteArray())
+                }
+            }
+            Snackbar.make(
+                binding.root,
+                "Saved ${recordBuffer.size} lines to ${outFile.name}",
+                Snackbar.LENGTH_SHORT
+            ).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error writing file", e)
+            Snackbar.make(binding.root, "Save failed: ${e.message}", Snackbar.LENGTH_LONG).show()
+        }
+    }
+
+    fun onServiceReady() {
+        bleService = (activity as? MainActivity)?.getBleServiceInstance()
+        if (bleService != null && !hasAttemptedObservationSetup) {
+            observeSensorData()
+            hasAttemptedObservationSetup = true
+        } else if (bleService == null) {
+            binding.txtSensorData.text = "Error getting service"
+        }
+    }
+
+    private fun observeSensorData() {
+        bleService?.apply {
+            speed.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            pitch.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            roll.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            yaw.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            lastEvent.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            imuDirection.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            hallDirection.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            imuSpeedState.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            gForce.observe(viewLifecycleOwner) { updateSensorDisplay() }
+            connectionStatus.observe(viewLifecycleOwner) { status ->
+                if (status !in listOf("Ready", "Connected", "Services Discovered")) {
+                    binding.txtSensorData.text = "Status: $status"
+                } else if (status == "Ready") {
+                    updateSensorDisplay()
+                }
             }
         }
     }
 
     private fun updateSensorDisplay() {
-        // Get the latest values from LiveData
         val speed = bleService?.speed?.value ?: 0.0f
         val pitch = bleService?.pitch?.value ?: 0.0f
         val roll = bleService?.roll?.value ?: 0.0f
@@ -125,47 +181,44 @@ class SensorsFragment : Fragment() {
             2 -> "Fast"
             else -> "N/A"
         }
-        // --- Add this line to get G-Force ---
         val gForce = bleService?.gForce?.value ?: 0.0f
-        // --- End G-Force addition ---
 
-        // Format the string to display (add G-Force)
-        val displayText = String.format(Locale.US,
-            "Speed: %.1f km/h | G-Force: %.2fg\n" + // Added G-Force here
+        val displayText = String.format(
+            Locale.US,
+            "Speed: %.1f km/h | G-Force: %.2fg\n" +
                     "Pitch: %.1f | Roll: %.1f | Yaw: %.1f\n" +
                     "IMU Dir: %s | Hall Dir: %s\n" +
                     "IMU Spd State: %s\n" +
                     "Event: %s",
-            speed, gForce, // Add gForce to format arguments
+            speed, gForce,
             pitch, roll, yaw,
             imuDir, hallDir,
             speedState,
             lastEvent
         )
+        binding.txtSensorData.text = displayText
 
-        binding.txtSensorData.text = displayText // Set the text
+        // If recording is active, capture this triple
+        if (isRecording) {
+            recordBuffer.add(
+                String.format(Locale.US, "IMU: %.1f, %.1f, %.1f", pitch, roll, yaw)
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (bleService == null && (activity as? MainActivity)?.isServiceConnected == true) {
+            onServiceReady()
+        } else {
+            updateSensorDisplay()
+        }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
-        hasAttemptedObservationSetup = false // Reset flag
-        Log.d(TAG, "Fragment view destroyed")
-    }
-
-    // Optional: Try to get service reference again when fragment resumes
-    override fun onResume() {
-        super.onResume()
-        Log.d(TAG, "onResume called.")
-        // If service is ready but observation hasn't started (e.g., fragment recreated)
-        if (bleService == null && (activity as? MainActivity)?.isServiceConnected == true) {
-            Log.d(TAG, "onResume: Service connected, attempting to set up observers.")
-            onServiceReady()
-        } else if (bleService != null) {
-            // Service already known, ensure UI reflects current state
-            updateSensorDisplay()
-        } else {
-            binding.txtSensorData.text = "Waiting for connection..."
-        }
+        hasAttemptedObservationSetup = false
+        mainHandler.removeCallbacksAndMessages(null)
     }
 }

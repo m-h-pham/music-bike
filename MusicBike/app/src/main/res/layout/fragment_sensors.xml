@@ -1,20 +1,108 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp" tools:context=".ui.fragments.SensorsFragment">
+    android:padding="16dp">
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="4dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+    </androidx.cardview.widget.CardView>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilFilename"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="Filename"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/txtSensorData">
+
+    </com.google.android.material.textfield.TextInputLayout>
 
     <TextView
-        android:id="@+id/txtSensorData" android:layout_width="0dp"
+        android:id="@+id/txtDurationLabel"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:text="Duration (s):"
+        android:textAppearance="@style/TextAppearance.AppCompat.Body2"
+        app:layout_constraintEnd_toStartOf="@+id/seekRecordingDuration"
+        app:layout_constraintTop_toTopOf="@+id/seekRecordingDuration" />
+
+    <SeekBar
+        android:id="@+id/seekRecordingDuration"
+        android:layout_width="150dp"
+        android:layout_height="wrap_content"
+        android:max="20"
+        android:progress="0"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.67"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/editFilename" />
+
+    <TextView
+        android:id="@+id/txtDurationValue"
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:text="0.0"
+        android:textAppearance="@style/TextAppearance.AppCompat.Body2"
+        app:layout_constraintStart_toEndOf="@+id/seekRecordingDuration"
+        app:layout_constraintTop_toTopOf="@+id/seekRecordingDuration" />
+
+
+    <TextView
+        android:id="@+id/txtRecordingSectionCaption"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingVertical="4dp"
+        android:text="Machine Learning Data Capture"
+        android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:textAlignment="center"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/txtSensorData"/>
+
+
+    <Button
+        android:id="@+id/btnStartRecording"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Start Recording"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/seekRecordingDuration" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/editFilename"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/txtRecordingSectionCaption"
+        tools:layout_editor_absoluteX="24dp" />
+
+    <TextView
+        android:id="@+id/txtSensorData"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
         android:text="Waiting for data..."
         android:textAppearance="@style/TextAppearance.AppCompat.Medium"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         tools:text="Speed: 12.34 km/h\nPitch: 10.1\nRoll: -5.2\nYaw: 180.0\nEvent: NONE" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>
