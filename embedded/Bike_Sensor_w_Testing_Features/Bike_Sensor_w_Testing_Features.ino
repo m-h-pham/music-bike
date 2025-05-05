@@ -1,3 +1,21 @@
+// =============================================================================
+// HARDWARE ADJUSTMENT NOTES (As of 2025-05-04)
+// =============================================================================
+//
+// 1. Hall Effect Sensor Power (KY-003 Modules on GPIO 15, 16):
+//    - Supply voltage for these sensors was changed from 3.3V to 5V.
+//    - Reason: Resolved signal instability ('flickering') and phantom speed
+//      readings observed when sensors were powered at 3.3V. The sensors
+//      provide a stable output when powered at 5V.
+//
+// 2. Startup Stability Capacitor:
+//    - A capacitor was added across the main power input (or near the ESP32).
+//    - Reason: To stabilize the supply voltage during high current demands
+//      at startup (especially from the radio), improving boot reliability
+//      and preventing potential resets when running on battery power.
+//
+// =============================================================================
+
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -170,11 +188,6 @@ class MyServerCallbacks: public BLEServerCallbacks {
         Serial.println("BLE Advertising restarted");
     }
 };
-
-//==============================================================================
-// FUNCTION PROTOTYPES FOR HELPER FUNCTIONS
-//==============================================================================
-// (None needed currently)
 
 //==============================================================================
 // TASK FUNCTIONS (Code within tasks now uses defines)
@@ -461,85 +474,6 @@ void potTuningTask(void *pvParameters) {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }
 }
-
-
-// //------------------------------------------------------------------------------
-// // ** Task: Read Potentiometers and Update Thresholds (Original ESP-IDF Version) ** Painfull debugging night 4/30/25 with gemini 2.5
-// //------------------------------------------------------------------------------
-
-// // --- Notes on ADC Usage Approaches ---
-// // 1. ESP-IDF Functions (`adc1_...`, `adc2_...`):
-// //    - Lower-level access provided by Espressif's framework.
-// //    - Offer per-channel configuration (attenuation).
-// //    - Require using the correct function family (adc1_ vs adc2_).
-// //    - adc2_get_raw() needs 3 arguments (channel, width, output_pointer). ex:int jumpPotRaw = adc2_get_raw(ADC2_CHANNEL_4, ADC_WIDTH_BIT_12, &jumpPotRaw);
-// //    - More control, but more complex syntax.
-// // 2. Arduino Functions (`analogRead`, `analogSetWidth`, `analogSetPinAttenuation`):
-// //    - Higher-level wrappers provided by the Arduino Core for ESP32.
-// //    - Simpler usage: `analogRead(GPIO_PIN_NUMBER)`.
-// //    - Configuration (width, attenuation) usually set globally once (e.g., in setup).
-// //    - Handles ADC1/ADC2 selection based on GPIO number more implicitly.
-// //    - Easier for basic use, less fine-grained control.
-
-// // --- Notes on ADC1 vs ADC2 ---
-// // - ADC1: Generally preferred. Can be used while Wi-Fi is active. Typically GPIOs 32-39.
-// // - ADC2: Cannot be used while Wi-Fi is active. Driver functions are separate (`adc2_...`). Typically other GPIOs (inc. 4, 15).
-
-// void potTuningTask(void *pvParameters) {
-//     Serial.println("potTuningTask started");
-//     TickType_t xLastWakeTime;
-//     const TickType_t xFrequency = pdMS_TO_TICKS(100); // Run ~10Hz
-
-//     // --- Original ESP-IDF ADC Configuration ---
-//     adc1_config_width(ADC_WIDTH_BIT_12); // Set 12-bit resolution for ADC1
-
-//     // PROBLEM AREA: Configuring ADC1 Channel 3
-//     // On this specific board (ESP32-S3), ADC1_CHANNEL_3 maps to GPIO 4.
-//     // However, GPIO 4 was also used as ZERO_BUTTON_PIN (digital input w/ pullup).
-//     // Configuring/reading GPIO 4 as an ADC input here conflicted with its use as a button,
-//     // causing the button to read LOW incorrectly when this task was running.
-//     adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_11); // Conflicts with ZERO_BUTTON_PIN (GPIO 4) on this board!
-
-//     // PROBLEM AREA: Configuring pins 16 & 17
-//     // These GPIOs (16, 17) are not standard ADC inputs on most ESP32 variants.
-//     // These lines likely configured non-existent/invalid ADC channels based on the original defines.
-//     adc1_config_channel_atten(ADC1_CHANNEL_4, ADC_ATTEN_DB_11); // Pin 16? Likely invalid ADC channel.
-//     adc1_config_channel_atten(ADC1_CHANNEL_5, ADC_ATTEN_DB_11); // Pin 17? Likely invalid ADC channel.
-
-//     xLastWakeTime = xTaskGetTickCount();
-
-//     // Internal static variables - these were unused/copied from processingTask
-//     // static bool inJumpState = false;
-//     // ... (other unused static vars) ...
-
-//     while(1) {
-//         // --- Read Analog Values using ESP-IDF ADC1 functions ---
-//         // Note: These calls would read the channels configured above.
-//         int jumpPotRaw = adc1_get_raw(ADC1_CHANNEL_3); // Reads GPIO 4 (conflicting pin)
-//         int landPotRaw = adc1_get_raw(ADC1_CHANNEL_4); // Reads invalid channel? (originally Pin 16)
-//         int dropPotRaw = adc1_get_raw(ADC1_CHANNEL_5); // Reads invalid channel? (originally Pin 17)
-
-//         // --- Map Raw Values (0-4095) to Threshold Ranges ---
-//         // (Mapping logic assumes reads were valid)
-//         float local_jumpThreshold = JUMP_THRESH_MIN + ((float)jumpPotRaw / 4095.0f) * (JUMP_THRESH_MAX - JUMP_THRESH_MIN);
-//         float local_landingThreshold = LAND_THRESH_MIN + ((float)landPotRaw / 4095.0f) * (LAND_THRESH_MAX - LAND_THRESH_MIN);
-//         float local_dropThreshold = DROP_THRESH_MIN + ((float)dropPotRaw / 4095.0f) * (DROP_THRESH_MAX - DROP_THRESH_MIN);
-
-//         // --- Update Shared Config Variables (Protected by Mutex) ---
-//         if (xSemaphoreTake(configMutex, portMAX_DELAY) == pdTRUE) {
-//             jumpThreshold = local_jumpThreshold;
-//             landingThreshold = local_landingThreshold;
-//             dropThreshold = local_dropThreshold;
-//             xSemaphoreGive(configMutex);
-//         } else {
-//             Serial.println("Warning: potTuningTask failed to get configMutex!");
-//         }
-
-//         vTaskDelayUntil(&xLastWakeTime, xFrequency);
-//     }
-// }
-
-
 
 //------------------------------------------------------------------------------
 // Task: Process Data, Detect Events, Handle Button
@@ -978,8 +912,3 @@ void setup() {
 void loop() {
       vTaskDelay(pdMS_TO_TICKS(1000));
 }
-
-//==============================================================================
-// HELPER FUNCTIONS (If any)
-//==============================================================================
-// (None currently)
