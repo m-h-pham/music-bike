@@ -57,8 +57,8 @@ Java_com_app_musicbike_ui_activities_MainActivity_startFMODPlayback(JNIEnv *env,
     std::lock_guard<std::mutex> lock(fmodMutex);
     FMOD_RESULT result;
 
+    // Initialize FMOD system if not already
     if (studioSystem == nullptr) {
-        LOGI("Initializing FMOD Studio System");
         result = FMOD::Studio::System::create(&studioSystem);
         if (!checkFMODError(result, "System::create")) return;
 
@@ -68,43 +68,58 @@ Java_com_app_musicbike_ui_activities_MainActivity_startFMODPlayback(JNIEnv *env,
             studioSystem = nullptr;
             return;
         }
-
-        FMOD::Studio::Bank *bank = nullptr;
-        result = studioSystem->loadBankFile(masterBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL,
-                                            &bank);
-        if (!checkFMODError(result, "loadBankFile (Master)")) {
-            studioSystem->release();
-            studioSystem = nullptr;
-            return;
-        }
-
-        FMOD::Studio::Bank *stringsBank = nullptr;
-        result = studioSystem->loadBankFile(stringsBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL,
-                                            &stringsBank);
-        if (result != FMOD_OK) {
-            LOGI("No strings bank loaded (optional)");
-        }
-
-        FMOD::Studio::EventDescription *eventDescription = nullptr;
-        result = studioSystem->getEvent("event:/Bike", &eventDescription);
-        if (!checkFMODError(result, "getEvent")) {
-            studioSystem->release();
-            studioSystem = nullptr;
-            return;
-        }
-
-        result = eventDescription->createInstance(&eventInstance);
-        if (!checkFMODError(result, "createInstance")) {
-            studioSystem->release();
-            studioSystem = nullptr;
-            return;
-        }
     }
 
+    // Stop and release existing event instance
     if (eventInstance) {
-        LOGI("FMOD event:/Bike loaded and ready. Waiting for user to start playback.");
+        FMOD_STUDIO_PLAYBACK_STATE state;
+        eventInstance->getPlaybackState(&state);
+        if (state == FMOD_STUDIO_PLAYBACK_PLAYING) {
+            eventInstance->stop(FMOD_STUDIO_STOP_IMMEDIATE);
+        }
+        eventInstance->release();
+        eventInstance = nullptr;
     }
 
+    // Unload all previously loaded banks
+    int bankCount = 0;
+    FMOD::Studio::Bank *loadedBanks[16];  // adjust size if needed
+    studioSystem->getBankList(loadedBanks, 16, &bankCount);
+    for (int i = 0; i < bankCount; ++i) {
+        loadedBanks[i]->unload();
+    }
+
+    // Load master bank
+    FMOD::Studio::Bank *bank = nullptr;
+    result = studioSystem->loadBankFile(masterBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL, &bank);
+    if (!checkFMODError(result, "loadBankFile (Master)")) {
+        studioSystem->release();
+        studioSystem = nullptr;
+        return;
+    }
+
+    // Load optional strings bank
+    FMOD::Studio::Bank *stringsBank = nullptr;
+    result = studioSystem->loadBankFile(stringsBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL, &stringsBank);
+    if (result != FMOD_OK) {
+        LOGI("No strings bank loaded (optional)");
+    }
+
+    // Load event
+    FMOD::Studio::EventDescription *eventDescription = nullptr;
+    result = studioSystem->getEvent("event:/Bike", &eventDescription);
+    if (!checkFMODError(result, "getEvent")) {
+        studioSystem->release();
+        studioSystem = nullptr;
+        return;
+    }
+
+    result = eventDescription->createInstance(&eventInstance);
+    if (!checkFMODError(result, "createInstance")) {
+        studioSystem->release();
+        studioSystem = nullptr;
+        return;
+    }
 
     if (!isRunning) {
         isRunning = true;
@@ -116,7 +131,8 @@ Java_com_app_musicbike_ui_activities_MainActivity_startFMODPlayback(JNIEnv *env,
 
     env->ReleaseStringUTFChars(masterBankPath, masterBankPathCStr);
     env->ReleaseStringUTFChars(stringsBankPath, stringsBankPathCStr);
-    }
+}
+
 
 
 JNIEXPORT void JNICALL

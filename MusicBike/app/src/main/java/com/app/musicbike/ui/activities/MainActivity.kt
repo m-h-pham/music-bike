@@ -78,15 +78,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun copyAssetToInternalStorage(assetName: String): String {
         val file = File(filesDir, assetName)
-        if (!file.exists()) {
-            assets.open(assetName).use { inputStream ->
-                file.outputStream().use { outputStream ->
-                    inputStream.copyTo(outputStream)
-                }
+
+        // Always delete the old bank file to ensure updated version is copied
+        if (file.exists()) {
+            file.delete()
+            Log.d(TAG, "Deleted existing $assetName to ensure updated bank is used.")
+        }
+
+        // Copy the asset into internal storage
+        assets.open(assetName).use { inputStream ->
+            file.outputStream().use { outputStream ->
+                inputStream.copyTo(outputStream)
             }
         }
+
         return file.absolutePath
     }
+
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
