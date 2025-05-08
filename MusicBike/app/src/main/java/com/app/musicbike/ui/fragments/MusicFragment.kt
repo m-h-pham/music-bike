@@ -38,6 +38,10 @@ class MusicFragment : Fragment() {
         return binding.root
     }
 
+    fun onServiceReady() {
+        bleService = (activity as? MainActivity)?.getBleServiceInstance()
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val mainActivity = activity as? MainActivity
         bleService = mainActivity?.getBleServiceInstance()
@@ -285,5 +289,12 @@ class MusicFragment : Fragment() {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {}
         override fun onStartTrackingTouch(seekBar: SeekBar?) {}
         override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (bleService == null && (activity as? MainActivity)?.isServiceConnected == true) {
+            onServiceReady()
+        }
     }
 }

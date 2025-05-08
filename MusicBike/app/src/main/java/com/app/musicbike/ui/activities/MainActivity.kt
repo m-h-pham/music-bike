@@ -13,6 +13,7 @@ import com.app.musicbike.databinding.ActivityMainBinding
 import com.app.musicbike.services.BleService
 import com.app.musicbike.ui.adapter.ViewPagerAdapter
 import com.app.musicbike.ui.fragments.DevicesFragment
+import com.app.musicbike.ui.fragments.MusicFragment
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import java.io.File
@@ -38,6 +39,8 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "Service connected variable set.") // Existing log
 
             notifyDevicesFragmentServiceReady() // Call the notification function
+            notifyMusicFragmentServiceReady()   // Call the function
+
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -140,6 +143,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun notifyMusicFragmentServiceReady() {
+        val musicFragmentPosition = 0
+        val fragmentTag = "f$musicFragmentPosition"
+        val fragment = supportFragmentManager.findFragmentByTag(fragmentTag)
+
+        if (fragment is MusicFragment) {
+            Log.d(TAG, "notifyMusicFragmentServiceReady: Found MusicFragment, calling onServiceReady().")
+            fragment.onServiceReady()
+        } else {
+            Log.w(TAG, "notifyMusicFragmentServiceReady: Could not find MusicFragment with tag $fragmentTag.")
+        }
+    }
 
     private fun setupViewPager() {
         // ... (rest of setupViewPager is unchanged) ...
