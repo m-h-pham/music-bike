@@ -38,6 +38,9 @@ class MainActivity : AppCompatActivity() {
             isServiceConnected = true
             Log.d(TAG, "Service connected variable set.") // Existing log
 
+            Log.d(TAG, "bleService reference set: $bleService")
+            Log.d(TAG, "bleService.connectionStatus = ${bleService?.connectionStatus?.value}")
+
             notifyDevicesFragmentServiceReady() // Call the notification function
             notifyMusicFragmentServiceReady()   // Call the function
 

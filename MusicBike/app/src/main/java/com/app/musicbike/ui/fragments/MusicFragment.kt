@@ -3,6 +3,7 @@ package com.app.musicbike.ui.fragments
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.*
 import android.widget.*
 import androidx.fragment.app.Fragment
@@ -29,8 +30,15 @@ class MusicFragment : Fragment() {
     private var bleService: BleService? = null
 
     private fun isBleConnected(): Boolean {
-        return bleService?.connectionStatus?.value == "Connected"
+        val mainActivity = activity as? MainActivity
+        bleService = mainActivity?.getBleServiceInstance()  // Always refresh
+        val status = bleService?.connectionStatus?.value ?: return false
+        Log.d("MusicFragment", "BLE connection status: $status")
+        return status.contains("connected", true) ||
+                status.contains("ready", true) ||
+                status.contains("discovered", true)
     }
+
 
     private fun hideStatus(icon: ImageView) {
         fadeOut(icon)
