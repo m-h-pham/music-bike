@@ -14,7 +14,7 @@ import java.util.*
 
 class MusicFragment : Fragment() {
 
-    private val testMode = false  // Set to true for testing without BLE <------------------------
+    private val testMode = false
 
     private var _binding: FragmentMusicBinding? = null
     private val binding get() = _binding!!
@@ -28,10 +28,13 @@ class MusicFragment : Fragment() {
 
     private var bleService: BleService? = null
 
+    private fun isBleConnected(): Boolean {
+        return bleService?.connectionStatus?.value == "Connected"
+    }
+
     private fun hideStatus(icon: ImageView) {
         fadeOut(icon)
     }
-
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentMusicBinding.inflate(inflater, container, false)
@@ -61,7 +64,7 @@ class MusicFragment : Fragment() {
         binding.wheelSpeedModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             isWheelSpeedAuto = isChecked
             binding.wheelSpeedSeekBar.isEnabled = !isChecked
-            if (isChecked) {
+            if (isChecked && isBleConnected()) {
                 val success = observeWheelSpeed()
                 showStatus(binding.wheelSpeedStatusIcon, success)
                 if (!success) {
@@ -69,6 +72,10 @@ class MusicFragment : Fragment() {
                     showToast("BLE unavailable for Wheel Speed. Reverting to manual.")
                     isWheelSpeedAuto = false
                 }
+            } else if (isChecked) {
+                revertSwitch(binding.wheelSpeedModeSwitch, binding.wheelSpeedSeekBar, binding.wheelSpeedStatusIcon)
+                showToast("BLE not connected. Reverting to manual.")
+                isWheelSpeedAuto = false
             } else {
                 hideStatus(binding.wheelSpeedStatusIcon)
             }
@@ -82,7 +89,7 @@ class MusicFragment : Fragment() {
         binding.pitchModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             isPitchAuto = isChecked
             binding.pitchSeekBar.isEnabled = !isChecked
-            if (isChecked) {
+            if (isChecked && isBleConnected()) {
                 val success = observePitch()
                 showStatus(binding.pitchStatusIcon, success)
                 if (!success) {
@@ -90,6 +97,10 @@ class MusicFragment : Fragment() {
                     showToast("BLE unavailable for Pitch. Reverting to manual.")
                     isPitchAuto = false
                 }
+            } else if (isChecked) {
+                revertSwitch(binding.pitchModeSwitch, binding.pitchSeekBar, binding.pitchStatusIcon)
+                showToast("BLE not connected. Reverting to manual.")
+                isPitchAuto = false
             } else {
                 hideStatus(binding.pitchStatusIcon)
             }
@@ -120,7 +131,7 @@ class MusicFragment : Fragment() {
         binding.eventModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             isEventAuto = isChecked
             binding.eventSpinner.isEnabled = !isChecked
-            if (isChecked) {
+            if (isChecked && isBleConnected()) {
                 val success = observeEvent()
                 showStatus(binding.eventStatusIcon, success)
                 if (!success) {
@@ -128,6 +139,10 @@ class MusicFragment : Fragment() {
                     showToast("BLE unavailable for Event. Reverting to manual.")
                     isEventAuto = false
                 }
+            } else if (isChecked) {
+                revertSwitch(binding.eventModeSwitch, binding.eventSpinner, binding.eventStatusIcon)
+                showToast("BLE not connected. Reverting to manual.")
+                isEventAuto = false
             } else {
                 hideStatus(binding.eventStatusIcon)
             }
@@ -136,6 +151,13 @@ class MusicFragment : Fragment() {
         // Auto All
         binding.autoAllSwitch.setOnCheckedChangeListener { _, isChecked ->
             isAutoAll = isChecked
+
+            if (isChecked && !isBleConnected()) {
+                showToast("BLE not connected. Auto All cancelled.")
+                handler.postDelayed({ binding.autoAllSwitch.isChecked = false }, 2000)
+                return@setOnCheckedChangeListener
+            }
+
             var allSuccess = true
 
             binding.wheelSpeedModeSwitch.isChecked = isChecked
@@ -199,7 +221,6 @@ class MusicFragment : Fragment() {
         return true
     }
 
-
     private fun observePitch(): Boolean {
         val mainActivity = activity as? MainActivity
 
@@ -220,7 +241,6 @@ class MusicFragment : Fragment() {
         }
         return true
     }
-
 
     private fun observeEvent(): Boolean {
         val mainActivity = activity as? MainActivity
@@ -249,7 +269,6 @@ class MusicFragment : Fragment() {
         }
         return true
     }
-
 
     private fun revertSwitch(switch: Switch, control: View, icon: ImageView) {
         switch.isChecked = false
