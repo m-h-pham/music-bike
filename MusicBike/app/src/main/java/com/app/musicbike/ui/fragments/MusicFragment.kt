@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.*
 import android.widget.*
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Observer
 import com.app.musicbike.R
 import com.app.musicbike.databinding.FragmentMusicBinding
 import com.app.musicbike.services.BleService
@@ -25,23 +26,21 @@ class MusicFragment : Fragment() {
     private var isWheelSpeedAuto = false
     private var isPitchAuto = false
     private var isEventAuto = false
-    private var isAutoAll = false
 
     private var bleService: BleService? = null
 
+    // Observers
+    private var speedObserver: Observer<Float>? = null
+    private var pitchObserver: Observer<Float>? = null
+    private var eventObserver: Observer<String>? = null
+
     private fun isBleConnected(): Boolean {
         val mainActivity = activity as? MainActivity
-        bleService = mainActivity?.getBleServiceInstance()  // Always refresh
+        bleService = mainActivity?.getBleServiceInstance()
         val status = bleService?.connectionStatus?.value ?: return false
-        Log.d("MusicFragment", "BLE connection status: $status")
         return status.contains("connected", true) ||
                 status.contains("ready", true) ||
                 status.contains("discovered", true)
-    }
-
-
-    private fun hideStatus(icon: ImageView) {
-        fadeOut(icon)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -69,24 +68,16 @@ class MusicFragment : Fragment() {
             mainActivity?.setFMODParameter("Wheel Speed", it)
         }
 
-        binding.wheelSpeedModeSwitch.setOnCheckedChangeListener { _, isChecked ->
+        binding.wheelSpeedModeSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
+            if (isChecked && !isBleConnected()) {
+                buttonView.isChecked = false
+                binding.wheelSpeedSeekBar.isEnabled = true
+                showToast("BLE not connected. Auto mode cancelled.")
+                return@setOnCheckedChangeListener
+            }
             isWheelSpeedAuto = isChecked
             binding.wheelSpeedSeekBar.isEnabled = !isChecked
-            if (isChecked && isBleConnected()) {
-                val success = observeWheelSpeed()
-                showStatus(binding.wheelSpeedStatusIcon, success)
-                if (!success) {
-                    revertSwitch(binding.wheelSpeedModeSwitch, binding.wheelSpeedSeekBar, binding.wheelSpeedStatusIcon)
-                    showToast("BLE unavailable for Wheel Speed. Reverting to manual.")
-                    isWheelSpeedAuto = false
-                }
-            } else if (isChecked) {
-                revertSwitch(binding.wheelSpeedModeSwitch, binding.wheelSpeedSeekBar, binding.wheelSpeedStatusIcon)
-                showToast("BLE not connected. Reverting to manual.")
-                isWheelSpeedAuto = false
-            } else {
-                hideStatus(binding.wheelSpeedStatusIcon)
-            }
+            if (isChecked) observeWheelSpeed() else removeWheelSpeedObserver()
         }
 
         // Pitch
@@ -94,24 +85,16 @@ class MusicFragment : Fragment() {
             mainActivity?.setFMODParameter("Pitch", it)
         }
 
-        binding.pitchModeSwitch.setOnCheckedChangeListener { _, isChecked ->
+        binding.pitchModeSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
+            if (isChecked && !isBleConnected()) {
+                buttonView.isChecked = false
+                binding.pitchSeekBar.isEnabled = true
+                showToast("BLE not connected. Auto mode cancelled.")
+                return@setOnCheckedChangeListener
+            }
             isPitchAuto = isChecked
             binding.pitchSeekBar.isEnabled = !isChecked
-            if (isChecked && isBleConnected()) {
-                val success = observePitch()
-                showStatus(binding.pitchStatusIcon, success)
-                if (!success) {
-                    revertSwitch(binding.pitchModeSwitch, binding.pitchSeekBar, binding.pitchStatusIcon)
-                    showToast("BLE unavailable for Pitch. Reverting to manual.")
-                    isPitchAuto = false
-                }
-            } else if (isChecked) {
-                revertSwitch(binding.pitchModeSwitch, binding.pitchSeekBar, binding.pitchStatusIcon)
-                showToast("BLE not connected. Reverting to manual.")
-                isPitchAuto = false
-            } else {
-                hideStatus(binding.pitchStatusIcon)
-            }
+            if (isChecked) observePitch() else removePitchObserver()
         }
 
         // Event
@@ -132,55 +115,32 @@ class MusicFragment : Fragment() {
                     }
                 }
             }
-
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        binding.eventModeSwitch.setOnCheckedChangeListener { _, isChecked ->
+        binding.eventModeSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
+            if (isChecked && !isBleConnected()) {
+                buttonView.isChecked = false
+                binding.eventSpinner.isEnabled = true
+                showToast("BLE not connected. Auto mode cancelled.")
+                return@setOnCheckedChangeListener
+            }
             isEventAuto = isChecked
             binding.eventSpinner.isEnabled = !isChecked
-            if (isChecked && isBleConnected()) {
-                val success = observeEvent()
-                showStatus(binding.eventStatusIcon, success)
-                if (!success) {
-                    revertSwitch(binding.eventModeSwitch, binding.eventSpinner, binding.eventStatusIcon)
-                    showToast("BLE unavailable for Event. Reverting to manual.")
-                    isEventAuto = false
-                }
-            } else if (isChecked) {
-                revertSwitch(binding.eventModeSwitch, binding.eventSpinner, binding.eventStatusIcon)
-                showToast("BLE not connected. Reverting to manual.")
-                isEventAuto = false
-            } else {
-                hideStatus(binding.eventStatusIcon)
-            }
+            if (isChecked) observeEvent() else removeEventObserver()
         }
 
         // Auto All
         binding.autoAllSwitch.setOnCheckedChangeListener { _, isChecked ->
-            isAutoAll = isChecked
-
             if (isChecked && !isBleConnected()) {
                 showToast("BLE not connected. Auto All cancelled.")
                 handler.postDelayed({ binding.autoAllSwitch.isChecked = false }, 2000)
                 return@setOnCheckedChangeListener
             }
 
-            var allSuccess = true
-
             binding.wheelSpeedModeSwitch.isChecked = isChecked
-            if (isChecked && !observeWheelSpeed()) allSuccess = false
-
             binding.pitchModeSwitch.isChecked = isChecked
-            if (isChecked && !observePitch()) allSuccess = false
-
             binding.eventModeSwitch.isChecked = isChecked
-            if (isChecked && !observeEvent()) allSuccess = false
-
-            if (isChecked && !allSuccess) {
-                showToast("One or more sensors unavailable. Auto All reverted.")
-                handler.postDelayed({ binding.autoAllSwitch.isChecked = false }, 2500)
-            }
         }
     }
 
@@ -195,9 +155,8 @@ class MusicFragment : Fragment() {
     ) {
         seekBar.max = max
         seekBar.progress = initialProgress
-        val initialValue = initialProgress + offset
-        label.text = "$labelText: $initialValue"
-        onChange(initialValue.toFloat())
+        label.text = "$labelText: ${initialProgress + offset}"
+        onChange((initialProgress + offset).toFloat())
 
         seekBar.setOnSeekBarChangeListener(object : SimpleSeekBarChangeListener() {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -208,65 +167,47 @@ class MusicFragment : Fragment() {
         })
     }
 
-    private fun observeWheelSpeed(): Boolean {
+    private fun observeWheelSpeed() {
+        val source = bleService ?: return
+        removeWheelSpeedObserver()
         val mainActivity = activity as? MainActivity
-
-        if (testMode) {
-            val testValue = 60f
-            binding.wheelSpeedLabel.text = "Wheel Speed: ${testValue.toInt()}"
-            binding.wheelSpeedSeekBar.progress = testValue.toInt()
-            mainActivity?.setFMODParameter("Wheel Speed", testValue)
-            return true
-        }
-
-        val source = bleService ?: return false
-        source.speed.observe(viewLifecycleOwner) {
+        speedObserver = Observer {
             val clamped = it.coerceIn(0f, 100f)
-            binding.wheelSpeedLabel.text = "Wheel Speed: ${clamped.toInt()}"
             binding.wheelSpeedSeekBar.progress = clamped.toInt()
+            binding.wheelSpeedLabel.text = "Wheel Speed: ${clamped.toInt()}"
             mainActivity?.setFMODParameter("Wheel Speed", clamped)
         }
-        return true
+        source.speed.observe(viewLifecycleOwner, speedObserver!!)
     }
 
-    private fun observePitch(): Boolean {
+    private fun removeWheelSpeedObserver() {
+        speedObserver?.let { bleService?.speed?.removeObserver(it) }
+        speedObserver = null
+    }
+
+    private fun observePitch() {
+        val source = bleService ?: return
+        removePitchObserver()
         val mainActivity = activity as? MainActivity
-
-        if (testMode) {
-            val testPitch = 15f
-            binding.pitchLabel.text = "Pitch: ${testPitch.toInt()}"
-            binding.pitchSeekBar.progress = (testPitch + 45).toInt()
-            mainActivity?.setFMODParameter("Pitch", testPitch)
-            return true
-        }
-
-        val source = bleService ?: return false
-        source.pitch.observe(viewLifecycleOwner) {
+        pitchObserver = Observer {
             val clamped = it.coerceIn(-45f, 45f)
-            binding.pitchLabel.text = "Pitch: ${clamped.toInt()}"
             binding.pitchSeekBar.progress = (clamped + 45).toInt()
+            binding.pitchLabel.text = "Pitch: ${clamped.toInt()}"
             mainActivity?.setFMODParameter("Pitch", clamped)
         }
-        return true
+        source.pitch.observe(viewLifecycleOwner, pitchObserver!!)
     }
 
-    private fun observeEvent(): Boolean {
+    private fun removePitchObserver() {
+        pitchObserver?.let { bleService?.pitch?.removeObserver(it) }
+        pitchObserver = null
+    }
+
+    private fun observeEvent() {
+        val source = bleService ?: return
+        removeEventObserver()
         val mainActivity = activity as? MainActivity
-
-        if (testMode) {
-            val testEvent = "JUMP"
-            val index = when (testEvent.uppercase(Locale.US)) {
-                "JUMP" -> 1
-                "DROP" -> 2
-                else -> 0
-            }
-            binding.eventSpinner.setSelection(index)
-            mainActivity?.setFMODParameter("Event", index.toFloat())
-            return true
-        }
-
-        val source = bleService ?: return false
-        source.lastEvent.observe(viewLifecycleOwner) {
+        eventObserver = Observer {
             val index = when (it.uppercase(Locale.US)) {
                 "JUMP" -> 1
                 "DROP" -> 2
@@ -275,31 +216,12 @@ class MusicFragment : Fragment() {
             binding.eventSpinner.setSelection(index)
             mainActivity?.setFMODParameter("Event", index.toFloat())
         }
-        return true
+        source.lastEvent.observe(viewLifecycleOwner, eventObserver!!)
     }
 
-    private fun revertSwitch(switch: Switch, control: View, icon: ImageView) {
-        switch.isChecked = false
-        control.isEnabled = true
-        handler.postDelayed({ fadeOut(icon) }, 2500)
-    }
-
-    private fun showStatus(icon: ImageView, success: Boolean) {
-        icon.setImageResource(if (success) R.drawable.ic_status_on else R.drawable.ic_status_off)
-        fadeIn(icon)
-        handler.postDelayed({ fadeOut(icon) }, 2500)
-    }
-
-    private fun fadeIn(view: View, duration: Long = 300) {
-        view.alpha = 0f
-        view.visibility = View.VISIBLE
-        view.animate().alpha(1f).setDuration(duration).start()
-    }
-
-    private fun fadeOut(view: View, duration: Long = 300) {
-        view.animate().alpha(0f).setDuration(duration).withEndAction {
-            view.visibility = View.GONE
-        }.start()
+    private fun removeEventObserver() {
+        eventObserver?.let { bleService?.lastEvent?.removeObserver(it) }
+        eventObserver = null
     }
 
     private fun showToast(msg: String) {
@@ -309,6 +231,9 @@ class MusicFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+        removeWheelSpeedObserver()
+        removePitchObserver()
+        removeEventObserver()
         handler.removeCallbacksAndMessages(null)
     }
 
@@ -316,12 +241,5 @@ class MusicFragment : Fragment() {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {}
         override fun onStartTrackingTouch(seekBar: SeekBar?) {}
         override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (bleService == null && (activity as? MainActivity)?.isServiceConnected == true) {
-            onServiceReady()
-        }
     }
 }
