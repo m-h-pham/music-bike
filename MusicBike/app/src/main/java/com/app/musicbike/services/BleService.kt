@@ -65,6 +65,7 @@ class BleService : Service() {
         private val IMU_DIRECTION_CHARACTERISTIC_UUID: UUID = UUID.fromString("ceb04cf6-0555-4243-a27b-c85986ab4bd7") // Format: uint8_t (0=Rev, 1=Fwd)
         private val HALL_DIRECTION_CHARACTERISTIC_UUID: UUID = UUID.fromString("f231de63-475c-463d-9b3f-f338d7458bb9") // Format: uint8_t (0=Rev, 1=Fwd)
         private val IMU_SPEED_STATE_CHARACTERISTIC_UUID: UUID = UUID.fromString("738f5e54-5479-4941-ae13-caf4a9b07b2e") // Format: uint8_t (0=Stop/Slow, 1=Med, 2=Fast)
+        private val ACCELEROMETER_ZERO_CHARACTERISTIC_UUID: UUID = UUID.fromString("a29ff0d6-5bf9-4878-83f0-9f66a7e35a15") // Format: uint8_t (any non-zero value triggers zero)
     }
 
     // --- Bluetooth & State Variables ---
@@ -525,6 +526,11 @@ class BleService : Service() {
                 service.getCharacteristic(IMU_SPEED_STATE_CHARACTERISTIC_UUID)?.also { notificationQueue.addLast(it) }
                 service.getCharacteristic(GFORCE_CHARACTERISTIC_UUID)?.also { notificationQueue.addLast(it) }
 
+                // Verify accelerometer zero characteristic exists (but don't add to notification queue since it's write-only)
+                service.getCharacteristic(ACCELEROMETER_ZERO_CHARACTERISTIC_UUID)?.also {
+                    Log.d(TAG, "onServicesDiscovered: Found accelerometer zero characteristic")
+                } ?: Log.w(TAG, "onServicesDiscovered: Accelerometer zero characteristic not found")
+
                 if (notificationQueue.isNotEmpty()) {
                     Log.d(TAG, "onServicesDiscovered: Starting notification queue processing.")
                     processNotificationQueue()
@@ -836,6 +842,55 @@ class BleService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "writeCccd: Exception for ${descriptor.characteristic?.uuid}", e)
             false
+        }
+    }
+
+    // Add new function to zero the accelerometer
+    fun zeroAccelerometer(): Boolean {
+        val gatt = bluetoothGatt ?: run {
+            Log.e(TAG, "zeroAccelerometer: Not connected (bluetoothGatt is null)")
+            return false
+        }
+
+        if (!hasConnectPermission()) {
+            Log.e(TAG, "zeroAccelerometer: Missing BLUETOOTH_CONNECT permission")
+            return false
+        }
+
+        val service = gatt.getService(MUSIC_BIKE_SERVICE_UUID)
+        val characteristic = service?.getCharacteristic(ACCELEROMETER_ZERO_CHARACTERISTIC_UUID)
+
+        if (characteristic == null) {
+            Log.e(TAG, "zeroAccelerometer: Characteristic not found")
+            return false
+        }
+
+        try {
+            // Write a non-zero value (1) to trigger the zero reset
+            val value = byteArrayOf(1)
+            val success = characteristic.setValue(value)
+            if (!success) {
+                Log.e(TAG, "zeroAccelerometer: Failed to set value")
+                return false
+            }
+
+            // Set write type for Write With Response (handshake for zeroing)
+            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+
+            val writeSuccess = gatt.writeCharacteristic(characteristic)
+            if (writeSuccess) {
+                Log.i(TAG, "zeroAccelerometer: Write request sent successfully")
+                return true
+            } else {
+                Log.e(TAG, "zeroAccelerometer: Write request failed")
+                return false
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "zeroAccelerometer: SecurityException", e)
+            return false
+        } catch (e: Exception) {
+            Log.e(TAG, "zeroAccelerometer: Exception", e)
+            return false
         }
     }
 
