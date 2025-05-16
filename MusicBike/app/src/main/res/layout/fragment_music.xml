@@ -17,17 +17,38 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Bank Selector -->
+    <TextView
+        android:id="@+id/bankSelectorLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Select Music Bank:"
+        android:layout_marginTop="16dp"
+        app:layout_constraintTop_toBottomOf="@id/toggleButton"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <Spinner
+        android:id="@+id/bankSelector"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        app:layout_constraintTop_toBottomOf="@id/bankSelectorLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Auto All Switch -->
+
+    <!-- WHEEL SPEED -->
+
     <Switch
         android:id="@+id/autoAllSwitch"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="104dp"
         android:text="Auto All"
-        android:layout_marginTop="24dp"
-        app:layout_constraintTop_toBottomOf="@id/toggleButton"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/toggleButton" />
 
-    <!-- WHEEL SPEED -->
     <TextView
         android:id="@+id/wheelSpeedLabel"
         android:layout_width="wrap_content"

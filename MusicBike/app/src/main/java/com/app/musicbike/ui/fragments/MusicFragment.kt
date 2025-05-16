@@ -12,6 +12,7 @@ import com.app.musicbike.R
 import com.app.musicbike.databinding.FragmentMusicBinding
 import com.app.musicbike.services.BleService
 import com.app.musicbike.ui.activities.MainActivity
+import java.io.File
 import java.util.*
 
 class MusicFragment : Fragment() {
@@ -52,6 +53,15 @@ class MusicFragment : Fragment() {
         bleService = (activity as? MainActivity)?.getBleServiceInstance()
     }
 
+    private fun copyAssetToInternalStorage(assetName: String): String {
+        val file = File(requireContext().filesDir, assetName)
+        if (file.exists()) file.delete()
+        requireContext().assets.open(assetName).use { input ->
+            file.outputStream().use { output -> input.copyTo(output) }
+        }
+        return file.absolutePath
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val mainActivity = activity as? MainActivity
         bleService = mainActivity?.getBleServiceInstance()
@@ -63,7 +73,36 @@ class MusicFragment : Fragment() {
             binding.toggleButton.text = if (isPaused) "Play" else "Pause"
         }
 
+        // =========================
+        // Bank File Selection Setup
+        // =========================
+        val bankSpinner = binding.bankSelector
+        val allBanks = requireContext().assets.list("")?.filter {
+            it.endsWith(".bank") && !it.endsWith("strings.bank")
+        } ?: emptyList()
+
+        val bankNames = allBanks.map { it.removeSuffix(".bank") }
+
+        val bankAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, bankNames)
+        bankAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        bankSpinner.adapter = bankAdapter
+
+        bankSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                val selectedBankName = allBanks[position]
+                val masterBankPath = copyAssetToInternalStorage(selectedBankName)
+                val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
+                mainActivity?.startFMODPlayback(masterBankPath, stringsBankPath)
+                isPaused = true
+                binding.toggleButton.text = "Play"
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // ==============================
         // Wheel Speed
+        // ==============================
         setupSeekBar(binding.wheelSpeedSeekBar, binding.wheelSpeedLabel, "Wheel Speed", 100, 0, 0) {
             mainActivity?.setFMODParameter("Wheel Speed", it)
         }
@@ -115,6 +154,7 @@ class MusicFragment : Fragment() {
                     }
                 }
             }
+
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
@@ -242,4 +282,5 @@ class MusicFragment : Fragment() {
         override fun onStartTrackingTouch(seekBar: SeekBar?) {}
         override fun onStopTrackingTouch(seekBar: SeekBar?) {}
     }
+
 }
