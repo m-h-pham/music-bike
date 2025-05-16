@@ -64,15 +64,15 @@
         android:id="@+id/txtRecordingSectionCaption"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:gravity="center"
         android:paddingVertical="4dp"
         android:text="Machine Learning Data Capture"
+        android:textAlignment="center"
         android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
         android:textStyle="bold"
-        android:gravity="center"
-        android:textAlignment="center"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/txtSensorData"/>
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/txtSensorData" />
 
 
     <Button
@@ -85,6 +85,15 @@
         app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/seekRecordingDuration" />
+
+    <Button
+        android:id="@+id/btnZeroAccelerometer"
+        android:layout_width="150dp"
+        android:layout_height="wrap_content"
+        android:text="Zero Accelerometer"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/btnStartRecording" />
 
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/editFilename"

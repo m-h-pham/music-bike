@@ -7,6 +7,12 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
+// #include <TensorFlowLite.h>
+// #include <tensorflow/lite/micro/all_ops_resolver.h>
+// #include <tensorflow/lite/micro/micro_error_reporter.h>
+// #include <tensorflow/lite/micro/micro_interpreter.h>
+// #include <tensorflow/lite/schema/schema_generated.h>
+
 // --- FreeRTOS Includes ---
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -27,7 +33,6 @@
 #define HALL_SENSOR_PIN 5
 #define SDA_PIN 8
 #define SCL_PIN 9
-#define ZERO_BUTTON_PIN 4
 #define HALL_SENSOR_PIN_2 6 // Pin for the second Hall sensor
 #define BLE_LED_PIN 7       // Pin for the blue BLE connection indicator LED
 
@@ -70,6 +75,7 @@ const unsigned long directionDetectionTimeout = 500; // ms timeout to reset hall
 #define IMU_DIRECTION_CHARACTERISTIC_UUID "ceb04cf6-0555-4243-a27b-c85986ab4bd7"
 #define HALL_DIRECTION_CHARACTERISTIC_UUID "f231de63-475c-463d-9b3f-f338d7458bb9"
 #define IMU_SPEED_STATE_CHARACTERISTIC_UUID "738f5e54-5479-4941-ae13-caf4a9b07b2e"
+#define ACCELEROMETER_ZERO_CHARACTERISTIC_UUID "a29ff0d6-5bf9-4878-83f0-9f66a7e35a15"
 
 //==============================================================================
 // GLOBAL VARIABLES (Shared Data) & MUTEXES
@@ -131,17 +137,18 @@ bool oldDeviceConnected = false;      // Only used within BLE task, maybe make l
 // --- BLE Objects (Global, initialized in setup) ---
 BLEServer* pServer = NULL;
 BLECharacteristic* pSpeedCharacteristic = NULL;
-BLECharacteristic* pPitchCharacteristic = NULL; // Declaration added
-BLECharacteristic* pRollCharacteristic = NULL;  // Declaration added
-BLECharacteristic* pYawCharacteristic = NULL;   // Declaration added
+BLECharacteristic* pPitchCharacteristic = NULL; 
+BLECharacteristic* pRollCharacteristic = NULL;  
+BLECharacteristic* pYawCharacteristic = NULL;   
 BLECharacteristic* pGForceCharacteristic = NULL;
-BLECharacteristic* pEventCharacteristic = NULL; // Declaration added
-BLECharacteristic* pImuDirectionCharacteristic = NULL; // Declaration added
-BLECharacteristic* pHallDirectionCharacteristic = NULL;// Declaration added
-BLECharacteristic* pImuSpeedStateCharacteristic = NULL; // Declaration added
+BLECharacteristic* pEventCharacteristic = NULL;
+BLECharacteristic* pImuDirectionCharacteristic = NULL;
+BLECharacteristic* pHallDirectionCharacteristic = NULL;
+BLECharacteristic* pImuSpeedStateCharacteristic = NULL;
+BLECharacteristic* pAccelerometerZeroCharacteristic = NULL;
 
 // --- Display Object (Global) ---
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET); // Now uses defines
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // --- Task Handles (Optional, for controlling tasks later) ---
 TaskHandle_t imuTaskHandle = NULL;
@@ -151,7 +158,7 @@ TaskHandle_t bleTaskHandle = NULL;
 TaskHandle_t displayTaskHandle = NULL;
 
 //==============================================================================
-// BLE CALLBACK CLASS (Unchanged, uses defines now)
+// BLE CALLBACK CLASSES
 //==============================================================================
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServerInstance) {
@@ -160,7 +167,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
             xSemaphoreGive(bleConnectionMutex);
         }
         Serial.println("BLE Device Connected");
-        digitalWrite(BLE_LED_PIN, HIGH); // Uses define
+        digitalWrite(BLE_LED_PIN, HIGH);
     }
 
     void onDisconnect(BLEServer* pServerInstance) {
@@ -169,10 +176,42 @@ class MyServerCallbacks: public BLEServerCallbacks {
             xSemaphoreGive(bleConnectionMutex);
         }
         Serial.println("BLE Device Disconnected");
-        digitalWrite(BLE_LED_PIN, LOW); // Uses define
+        digitalWrite(BLE_LED_PIN, LOW);
         vTaskDelay(pdMS_TO_TICKS(500));
         pServer->startAdvertising();
         Serial.println("BLE Advertising restarted");
+    }
+};
+
+// Add new callback class for accelerometer zero characteristic
+class AccelerometerZeroCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+        std::string value = pCharacteristic->getValue().c_str();
+        if (value.length() > 0) {
+            // Any non-zero value will trigger the zero reset
+            if (value[0] != 0) {
+                Serial.println(">>> BLE Zero Command Received!");
+                
+                // Get current orientation values
+                float current_raw_pitch = 0.0, current_raw_roll = 0.0, current_raw_yaw = 0.0;
+                
+                if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) {
+                    current_raw_pitch = pitch;
+                    current_raw_roll = roll;
+                    current_raw_yaw = yaw;
+                    xSemaphoreGive(imuDataMutex);
+                    
+                    // Update offsets
+                    if (xSemaphoreTake(offsetMutex, portMAX_DELAY) == pdTRUE) {
+                        pitchOffset = current_raw_pitch;
+                        rollOffset = current_raw_roll;
+                        yawOffset = current_raw_yaw;
+                        xSemaphoreGive(offsetMutex);
+                        Serial.println(">>> BLE Zero: SUCCESS - Zero position offsets updated!");
+                    }
+                }
+            }
+        }
     }
 };
 
@@ -455,7 +494,6 @@ void processingTask(void *pvParameters) {
         bool local_imuDirectionForward = current_imuDir; // Start assuming current state holds
         int local_imuSpeedState = current_imuState;
 
-
         // --- Jump & Drop Detection (Using gForce and defines) ---
         // (Jump/Drop logic...)
         if (!inJumpState && local_gForce < JUMP_THRESHOLD) {
@@ -483,7 +521,6 @@ void processingTask(void *pvParameters) {
             local_dropDetected_this_cycle = false;
         }
 
-
         // --- IMU-Based Direction & Speed State ---
         float gravityCompAccelY = local_accelY - sin(local_pitch * PI / 180.0f);
 
@@ -505,55 +542,7 @@ void processingTask(void *pvParameters) {
         else if (accelMagnitudeXY > 0.2f) local_imuSpeedState = 1; // Medium
         else local_imuSpeedState = 0; // Slow/Stopped
 
-
-        // --- Zero Button Handling ---
-        int reading = digitalRead(ZERO_BUTTON_PIN); // Uses define
-        bool button_pressed = false;
-        // Check for falling edge (button pressed)
-        if (reading == LOW && lastButtonState == HIGH) {
-            // Check debounce time
-            if ((currentMillis - lastDebounceTime) > debounceDelay) { // Uses define
-                button_pressed = true; // Flag that the button was pressed this cycle
-                lastDebounceTime = currentMillis; // Reset debounce timer
-                Serial.println(">>> Zero Button: Debounced Press Detected!"); // DEBUG
-            }
-        }
-        // Update last button state *regardless* of debounce check for next cycle's edge detection
-        lastButtonState = reading;
-
-        // --- Update Shared Variables ---
-
-        // Update Offsets *if* button was pressed *this cycle*
-        if (button_pressed) {
-            float current_raw_pitch=0.0, current_raw_roll=0.0, current_raw_yaw=0.0;
-            Serial.println(">>> Zero Button: Attempting to get imuDataMutex..."); // DEBUG
-            if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) {
-                // Read RAW orientation values at the moment of zeroing
-                current_raw_pitch = pitch;
-                current_raw_roll = roll;
-                current_raw_yaw = yaw;
-                xSemaphoreGive(imuDataMutex);
-                Serial.println(">>> Zero Button: Got imuDataMutex, read P:" + String(current_raw_pitch) + " R:" + String(current_raw_roll) + " Y:" + String(current_raw_yaw)); // DEBUG
-
-                Serial.println(">>> Zero Button: Attempting to get offsetMutex..."); // DEBUG
-                if (xSemaphoreTake(offsetMutex, portMAX_DELAY) == pdTRUE) {
-                    // Store these raw values as the new offsets
-                    pitchOffset = current_raw_pitch;
-                    rollOffset = current_raw_roll;
-                    yawOffset = current_raw_yaw;
-                    xSemaphoreGive(offsetMutex);
-                    Serial.println(">>> Zero Button: SUCCESS - Zero position offsets updated!"); // DEBUG Print *after* success
-                    // TODO: Maybe signal display task to show confirmation? Flag? Queue message?
-                } else {
-                     Serial.println(">>> Zero Button: FAILED to get offsetMutex!"); // DEBUG
-                }
-            } else {
-                 Serial.println(">>> Zero Button: FAILED to get imuDataMutex!"); // DEBUG
-            }
-        } // End of button_pressed handling
-
-        // Update Event Data (State data like jump/drop/direction/speed_state)
-        // Do this *every cycle* regardless of button press
+        // --- Update Event Data (State data like jump/drop/direction/speed_state) ---
         if (xSemaphoreTake(eventDataMutex, portMAX_DELAY) == pdTRUE) {
             jumpDetected = local_jumpDetected_this_cycle;
             dropDetected = local_dropDetected_this_cycle;
@@ -754,7 +743,6 @@ void setup() {
     // --- Initialize Hardware Pins ---
     pinMode(HALL_SENSOR_PIN, INPUT); // Uses define
     pinMode(HALL_SENSOR_PIN_2, INPUT); // Uses define
-    pinMode(ZERO_BUTTON_PIN, INPUT_PULLUP); // Uses define
     pinMode(BLE_LED_PIN, OUTPUT); // Uses define
     digitalWrite(BLE_LED_PIN, LOW);
 
@@ -809,6 +797,13 @@ void setup() {
     pImuSpeedStateCharacteristic->addDescriptor(new BLE2902());
     pGForceCharacteristic = pService->createCharacteristic(GFORCE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     pGForceCharacteristic->addDescriptor(new BLE2902());
+
+    pAccelerometerZeroCharacteristic = pService->createCharacteristic(
+        ACCELEROMETER_ZERO_CHARACTERISTIC_UUID, 
+        BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
+    );
+    pAccelerometerZeroCharacteristic->addDescriptor(new BLE2902());
+    pAccelerometerZeroCharacteristic->setCallbacks(new AccelerometerZeroCallbacks());
 
     pService->start();
 

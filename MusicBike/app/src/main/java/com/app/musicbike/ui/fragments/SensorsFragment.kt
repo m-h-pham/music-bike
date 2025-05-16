@@ -1,6 +1,8 @@
 package com.app.musicbike.ui.fragments
 
+import android.media.MediaPlayer
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -9,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
 import androidx.fragment.app.Fragment
+import com.app.musicbike.R // Import R for accessing resources (e.g., R.raw.sound_file)
 import com.app.musicbike.databinding.FragmentSensorsBinding
 import com.app.musicbike.services.BleService
 import com.app.musicbike.ui.activities.MainActivity
@@ -32,6 +35,11 @@ class SensorsFragment : Fragment() {
     private val recordBuffer = mutableListOf<String>()
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // Countdown and sound support
+    private var countdownTimer: CountDownTimer? = null
+    private var isCountingDown = false
+    private var mediaPlayer: MediaPlayer? = null
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -43,38 +51,21 @@ class SensorsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Initialize the slider (0..20 steps → 0.0..2.0s in 0.1s increments)
-        binding.seekRecordingDuration.max = 20
+        // Initialize the slider (0..50 steps → 0.0..5.0s in 0.1s increments)
+        binding.seekRecordingDuration.max = 50 // Example: 50 * 0.1f = 5.0 seconds max
         binding.seekRecordingDuration.progress = 0
         binding.txtDurationValue.text = "0.0"
 
         // Add listener to update duration value
         binding.seekRecordingDuration.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(
-                    seekBar: SeekBar,
-                    progress: Int,
-                    fromUser: Boolean
-                ) {
-                    // convert 0..20 to 0.0..2.0 seconds in 0.1 increments
-                    val seconds = progress * 0.1f
-                    binding.txtDurationValue.text =
-                        String.format(Locale.US, "%.1f", seconds)
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar) { /* no-op */ }
-                override fun onStopTrackingTouch(seekBar: SeekBar) { /* no-op */ }
-            }
-        )
-
-        binding.seekRecordingDuration.setOnSeekBarChangeListener(
-            object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
-                    recordDurationSec = progress * 0.1f
+                    recordDurationSec = progress * 0.1f // Adjust multiplier if max changes
                     binding.txtDurationValue.text =
                         String.format(Locale.US, "%.1f", recordDurationSec)
                 }
-                override fun onStartTrackingTouch(sb: SeekBar) {}
-                override fun onStopTrackingTouch(sb: SeekBar) {}
+                override fun onStartTrackingTouch(sb: SeekBar) { /* no-op */ }
+                override fun onStopTrackingTouch(sb: SeekBar) { /* no-op */ }
             }
         )
 
@@ -86,10 +77,30 @@ class SensorsFragment : Fragment() {
                     .show()
                 return@setOnClickListener
             }
-            startRecording(filename)
+
+            if (recordDurationSec <= 0f) {
+                Snackbar.make(binding.root, "Set a recording duration > 0 seconds", Snackbar.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (isRecording || isCountingDown) {
+                Snackbar.make(binding.root, "A recording or countdown is already in progress.", Snackbar.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // Filename and duration are valid, start the sequence
+            initiateRecordingSequence(filename)
         }
 
-        // Try to hook up BLE as before
+        // Zero accelerometer button
+        binding.btnZeroAccelerometer.setOnClickListener {
+            if (bleService?.zeroAccelerometer() == true) {
+                Snackbar.make(binding.root, "Zeroing accelerometer...", Snackbar.LENGTH_SHORT).show()
+            } else {
+                Snackbar.make(binding.root, "Failed to zero accelerometer", Snackbar.LENGTH_SHORT).show()
+            }
+        }
+
+        // Try to hook up BLE
         if ((activity as? MainActivity)?.isServiceConnected == true) {
             onServiceReady()
         } else {
@@ -97,27 +108,111 @@ class SensorsFragment : Fragment() {
         }
     }
 
-    private fun startRecording(filename: String) {
-        if (recordDurationSec <= 0f) {
+    private fun initiateRecordingSequence(filename: String) {
+        isCountingDown = true
+        binding.btnStartRecording.isEnabled = false
+        val countdownDurationMillis = 10000L // 10 seconds
+        val countDownIntervalMillis = 1000L  // 1 second
+
+        countdownTimer = object : CountDownTimer(countdownDurationMillis, countDownIntervalMillis) {
+            override fun onTick(millisUntilFinished: Long) {
+                val secondsRemaining = millisUntilFinished / 1000
+                binding.btnStartRecording.text = "Starting in ${secondsRemaining}s..."
+                when (secondsRemaining.toInt()) {
+                    3 -> playCountdownSound(3)
+                    2 -> playCountdownSound(2)
+                    1 -> playCountdownSound(1)
+                }
+            }
+            override fun onFinish() {
+                isCountingDown = false
+                binding.btnStartRecording.text = "Starting..." // Brief intermediate state
+                startActualRecording(filename)
+            }
+        }
+        binding.btnStartRecording.text = "Starting in 10s..." // Initial text for countdown
+        countdownTimer?.start()
+    }
+
+    private fun playCountdownSound(secondValue: Int) {
+        if (!isAdded) return // Ensure fragment is attached to a context
+        Log.d(TAG, "Attempting to play sound for $secondValue seconds left")
+        // Release any existing MediaPlayer instance.
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Error stopping/releasing previous MediaPlayer", e)
+        }
+        mediaPlayer = null
+        // Play sound at 3, 2, 1 in countdown
+        val soundResId = when (secondValue) {
+            3 -> R.raw.tone_beep_slow
+            2 -> R.raw.tone_beep_slow
+            1 -> R.raw.tone_beep_slow
+            else -> 0 // No sound defined
+        }
+        if (soundResId != 0) {
+            try {
+                mediaPlayer = MediaPlayer.create(requireContext(), soundResId)
+                mediaPlayer?.setOnCompletionListener { mp ->
+                    Log.d(TAG, "Sound playback completed for $secondValue.")
+                    mp.release()
+                    if (mediaPlayer == mp) { // Clear the reference if it's the same player that completed
+                        mediaPlayer = null
+                    }
+                }
+                mediaPlayer?.setOnErrorListener { mp, what, extra ->
+                    Log.e(TAG, "MediaPlayer error for sound $secondValue: what=$what, extra=$extra")
+                    mp.release()
+                    if (mediaPlayer == mp) {
+                        mediaPlayer = null
+                    }
+                    true // Error handled
+                }
+                mediaPlayer?.start()
+                Log.d(TAG, "Started sound for $secondValue.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing or playing sound for $secondValue seconds", e)
+                mediaPlayer?.release() // Ensure release on exception
+                mediaPlayer = null
+            }
+        } else {
+            Log.d(TAG, "No sound resource ID defined for $secondValue seconds left. Skipping sound.")
+        }
+        // For frequent, short sounds, consider using SoundPool for lower latency.
+    }
+
+    private fun startActualRecording(filename: String) {
+        if (recordDurationSec <= 0f) { // This check is now primarily in the click listener
             Snackbar.make(binding.root, "Set a duration > 0", Snackbar.LENGTH_SHORT).show()
+            // Reset button if something went wrong before this point
+            binding.btnStartRecording.text = "Start Recording"
+            binding.btnStartRecording.isEnabled = true
+            isRecording = false // Ensure this is false if we bail out
+            isCountingDown = false
             return
         }
         recordBuffer.clear()
         isRecording = true
         binding.btnStartRecording.text = "Recording..."
-        binding.btnStartRecording.isEnabled = false
-
+        binding.btnStartRecording.isEnabled = false // Should already be disabled, but ensure it
         // Schedule stop
         mainHandler.postDelayed({
             stopRecording(filename)
         }, (recordDurationSec * 1000).toLong())
+        Log.d(TAG, "Recording started for ${recordDurationSec}s. Saving to $filename.txt")
     }
 
     private fun stopRecording(filename: String) {
         isRecording = false
+        isCountingDown = false
         binding.btnStartRecording.text = "Start Recording"
         binding.btnStartRecording.isEnabled = true
-
+        countdownTimer?.cancel() // Cancel countdown if stop is called prematurely
+        if (recordBuffer.isEmpty() && recordDurationSec > 0) {
+            Log.w(TAG, "Recording stopped, but buffer is empty. File will be empty or not created.")
+        }
         try {
             val outFile = File(requireContext().filesDir, "$filename.txt")
             FileOutputStream(outFile).use { fos ->
@@ -130,10 +225,12 @@ class SensorsFragment : Fragment() {
                 "Saved ${recordBuffer.size} lines to ${outFile.name}",
                 Snackbar.LENGTH_SHORT
             ).show()
+            Log.d(TAG, "Saved ${recordBuffer.size} lines to ${outFile.absolutePath}")
         } catch (e: Exception) {
             Log.e(TAG, "Error writing file", e)
             Snackbar.make(binding.root, "Save failed: ${e.message}", Snackbar.LENGTH_LONG).show()
         }
+        recordBuffer.clear() // Clear buffer after saving or attempting to save
     }
 
     fun onServiceReady() {
@@ -161,28 +258,27 @@ class SensorsFragment : Fragment() {
                 if (status !in listOf("Ready", "Connected", "Services Discovered")) {
                     binding.txtSensorData.text = "Status: $status"
                 } else if (status == "Ready") {
-                    updateSensorDisplay()
+                    updateSensorDisplay() // Update display once BLE service is fully ready
                 }
             }
         }
     }
 
     private fun updateSensorDisplay() {
-        val speed = bleService?.speed?.value ?: 0.0f
-        val pitch = bleService?.pitch?.value ?: 0.0f
-        val roll = bleService?.roll?.value ?: 0.0f
-        val yaw = bleService?.yaw?.value ?: 0.0f
-        val lastEvent = bleService?.lastEvent?.value ?: "NONE"
-        val imuDir = if (bleService?.imuDirection?.value == 1) "Fwd" else "Rev"
-        val hallDir = if (bleService?.hallDirection?.value == 1) "Fwd" else "Rev"
-        val speedState = when (bleService?.imuSpeedState?.value) {
+        val speedVal = bleService?.speed?.value ?: 0.0f
+        val pitchVal = bleService?.pitch?.value ?: 0.0f
+        val rollVal = bleService?.roll?.value ?: 0.0f
+        val yawVal = bleService?.yaw?.value ?: 0.0f
+        val lastEventVal = bleService?.lastEvent?.value ?: "NONE"
+        val imuDirVal = if (bleService?.imuDirection?.value == 1) "Fwd" else "Rev"
+        val hallDirVal = if (bleService?.hallDirection?.value == 1) "Fwd" else "Rev"
+        val speedStateVal = when (bleService?.imuSpeedState?.value) {
             0 -> "Stop/Slow"
             1 -> "Medium"
             2 -> "Fast"
             else -> "N/A"
         }
-        val gForce = bleService?.gForce?.value ?: 0.0f
-
+        val gForceVal = bleService?.gForce?.value ?: 0.0f
         val displayText = String.format(
             Locale.US,
             "Speed: %.1f km/h | G-Force: %.2fg\n" +
@@ -190,35 +286,50 @@ class SensorsFragment : Fragment() {
                     "IMU Dir: %s | Hall Dir: %s\n" +
                     "IMU Spd State: %s\n" +
                     "Event: %s",
-            speed, gForce,
-            pitch, roll, yaw,
-            imuDir, hallDir,
-            speedState,
-            lastEvent
+            speedVal, gForceVal,
+            pitchVal, rollVal, yawVal,
+            imuDirVal, hallDirVal,
+            speedStateVal,
+            lastEventVal
         )
         binding.txtSensorData.text = displayText
-
-        // If recording is active, capture this triple
+        // If recording is active, capture this data
         if (isRecording) {
-            recordBuffer.add(
-                String.format(Locale.US, "IMU: %.1f, %.1f, %.1f", pitch, roll, yaw)
+            // Example: record all relevant values, comma-separated
+            val dataLine = String.format(Locale.US,
+                "%.2f,%.2f,%.2f,%.2f,%.2f,%s,%s,%s,%s",
+                System.currentTimeMillis() / 1000.0, // timestamp
+                pitchVal, rollVal, yawVal, gForceVal,
+                imuDirVal, hallDirVal, speedStateVal, lastEventVal
             )
+            recordBuffer.add(dataLine)
         }
     }
 
     override fun onResume() {
         super.onResume()
+        // Re-check service connection if it might have established while fragment was paused
         if (bleService == null && (activity as? MainActivity)?.isServiceConnected == true) {
             onServiceReady()
         } else {
+            // Update display with current values if service was already connected
             updateSensorDisplay()
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        _binding = null
+        _binding = null // Crucial to avoid memory leaks
         hasAttemptedObservationSetup = false
-        mainHandler.removeCallbacksAndMessages(null)
+        mainHandler.removeCallbacksAndMessages(null) // Stop any pending recording stops
+        countdownTimer?.cancel() // Cancel countdown if active
+        countdownTimer = null
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (e: IllegalStateException) {
+            // Ignore
+        }
+        mediaPlayer = null
     }
 }
