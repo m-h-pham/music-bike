@@ -8,7 +8,12 @@ import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.viewpager2.widget.ViewPager2
+import com.app.musicbike.R
 import com.app.musicbike.databinding.ActivityMainBinding
 import com.app.musicbike.services.BleService
 import com.app.musicbike.ui.adapter.ViewPagerAdapter
@@ -101,13 +106,24 @@ class MainActivity : AppCompatActivity() {
         return file.absolutePath
     }
 
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
+        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(toolbar) { view, insets ->
+            val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            view.setPadding(
+                view.paddingLeft,
+                statusBarHeight,
+                view.paddingRight,
+                view.paddingBottom
+            )
+            insets
+        }
+        toolbar.requestApplyInsets() // Force insets to be applied immediately
         setupViewPager()
         Log.d(TAG, "onCreate: Calling bindToService...") // Log before binding
         bindToService()

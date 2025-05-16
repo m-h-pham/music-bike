@@ -19,7 +19,13 @@ import com.google.android.material.snackbar.Snackbar
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
-
+import android.widget.ImageButton
+import android.widget.TextView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 class SensorsFragment : Fragment() {
 
     private val TAG = "SensorsFragment"
@@ -39,6 +45,9 @@ class SensorsFragment : Fragment() {
     private var countdownTimer: CountDownTimer? = null
     private var isCountingDown = false
     private var mediaPlayer: MediaPlayer? = null
+
+    // Used for machine learning file viewer
+    private lateinit var fileAdapter: FileAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -106,6 +115,7 @@ class SensorsFragment : Fragment() {
         } else {
             binding.txtSensorData.text = "Waiting for connection..."
         }
+        setupFileList()
     }
 
     private fun initiateRecordingSequence(filename: String) {
@@ -213,24 +223,45 @@ class SensorsFragment : Fragment() {
         if (recordBuffer.isEmpty() && recordDurationSec > 0) {
             Log.w(TAG, "Recording stopped, but buffer is empty. File will be empty or not created.")
         }
+        val outFile = getUniqueFile(filename)
         try {
-            val outFile = File(requireContext().filesDir, "$filename.txt")
             FileOutputStream(outFile).use { fos ->
                 recordBuffer.forEach { line ->
                     fos.write((line + "\n").toByteArray())
                 }
             }
-            Snackbar.make(
-                binding.root,
+            Snackbar.make(binding.root,
                 "Saved ${recordBuffer.size} lines to ${outFile.name}",
                 Snackbar.LENGTH_SHORT
             ).show()
-            Log.d(TAG, "Saved ${recordBuffer.size} lines to ${outFile.absolutePath}")
+            Log.d(TAG, "Saved to ${outFile.absolutePath}")
         } catch (e: Exception) {
             Log.e(TAG, "Error writing file", e)
-            Snackbar.make(binding.root, "Save failed: ${e.message}", Snackbar.LENGTH_LONG).show()
+            Snackbar.make(binding.root,
+                "Save failed: ${e.message}",
+                Snackbar.LENGTH_LONG
+            ).show()
         }
         recordBuffer.clear() // Clear buffer after saving or attempting to save
+    }
+
+    /**
+     * Returns a File in the app’s internal filesDir that does not
+     * collide with any existing .txt file by appending _1, _2, …
+     */
+    private fun getUniqueFile(baseName: String): File {
+        val dir = requireContext().filesDir
+        // Start with the plain name
+        var candidate = File(dir, "$baseName.txt")
+        if (!candidate.exists()) return candidate
+
+        // If it exists, try suffixes _1, _2, …
+        var suffix = 1
+        do {
+            candidate = File(dir, "${baseName}_$suffix.txt")
+            suffix++
+        } while (candidate.exists())
+        return candidate
     }
 
     fun onServiceReady() {
@@ -304,6 +335,75 @@ class SensorsFragment : Fragment() {
             )
             recordBuffer.add(dataLine)
         }
+    }
+
+    private class FileAdapter(
+        private val onDelete: (File) -> Unit
+    ) : ListAdapter<File, FileAdapter.FileViewHolder>(FILE_DIFF_CALLBACK) {
+
+        inner class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+            private val txtFilename: TextView = itemView.findViewById(R.id.txtFilename)
+            private val btnDelete: ImageButton = itemView.findViewById(R.id.btnDelete)
+
+            fun bind(file: File) {
+                txtFilename.text = file.name
+                btnDelete.setOnClickListener { onDelete(file) }
+            }
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.file_item, parent, false)
+            return FileViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
+            holder.bind(getItem(position))
+        }
+
+        companion object {
+            private val FILE_DIFF_CALLBACK = object : DiffUtil.ItemCallback<File>() {
+                override fun areItemsTheSame(old: File, new: File) =
+                    old.absolutePath == new.absolutePath
+
+                override fun areContentsTheSame(old: File, new: File) = true
+            }
+        }
+    }
+
+    private fun setupFileList() {
+        // Initialize adapter (as you already have)
+        fileAdapter = FileAdapter { file ->
+            if (file.delete()) {
+                Snackbar.make(binding.root, "Deleted ${file.name}", Snackbar.LENGTH_SHORT).show()
+                loadFileList()
+            } else {
+                Snackbar.make(binding.root, "Failed to delete ${file.name}", Snackbar.LENGTH_SHORT).show()
+            }
+        }
+
+        // Configure RecyclerView
+        binding.rvFileList.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = fileAdapter
+        }
+
+        // Configure pull-to-refresh
+        binding.swipeRefreshFiles.setOnRefreshListener {
+            loadFileList()                            // reload current .txt files
+            binding.swipeRefreshFiles.isRefreshing = false
+        }
+
+        // Initial load
+        loadFileList()
+    }
+
+    private fun loadFileList() {
+        val txtFiles = requireContext().filesDir
+            .listFiles { dir, name -> name.endsWith(".txt") }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
+        fileAdapter.submitList(txtFiles)
     }
 
     override fun onResume() {

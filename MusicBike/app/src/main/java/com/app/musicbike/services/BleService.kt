@@ -96,6 +96,13 @@ class BleService : Service() {
     private val _imuSpeedState = MutableLiveData(0) // 0=Stop/Slow, 1=Med, 2=Fast
     private val _gForce = MutableLiveData(0.0f)
 
+    // Add event timeout handler
+    private val eventTimeoutHandler = Handler(Looper.getMainLooper())
+    private val EVENT_TIMEOUT_MS = 3000L // 3 seconds timeout
+    private val resetEventRunnable = Runnable {
+        _lastEvent.postValue("NONE")
+    }
+
     // Public immutable LiveData for external observation
     val connectionStatus: LiveData<String> get() = _connectionStatus
     val scanResults: LiveData<List<BluetoothDevice>> get() = _scanResults

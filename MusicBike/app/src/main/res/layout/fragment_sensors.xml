@@ -99,6 +99,7 @@
         android:id="@+id/editFilename"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:hint="Enter file name"
         app:layout_constraintTop_toBottomOf="@+id/txtRecordingSectionCaption"
         tools:layout_editor_absoluteX="24dp" />
 
@@ -114,4 +115,31 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         tools:text="Speed: 12.34 km/h\nPitch: 10.1\nRoll: -5.2\nYaw: 180.0\nEvent: NONE" />
+
+    <TextView
+        android:id="@+id/txtSavedFilesLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Saved Data Files"
+        android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        app:layout_constraintTop_toBottomOf="@+id/btnZeroAccelerometer"
+        app:layout_constraintStart_toStartOf="parent"/>
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipeRefreshFiles"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@+id/txtSavedFilesLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvFileList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"/>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -62,11 +62,11 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    implementation("androidx.viewpager2:viewpager2:1.0.0")
-    implementation("com.google.android.material:material:1.10.0")
+    implementation(libs.androidx.viewpager2)
     // Lifecycle components including LiveData
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.3") // Use the latest stable version
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.3") // Often used with LiveData
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
-    implementation("androidx.fragment:fragment-ktx:1.8.1") // Provides viewModels delegate
+    implementation(libs.androidx.lifecycle.livedata.ktx) // Use the latest stable version
+    implementation(libs.androidx.lifecycle.viewmodel.ktx) // Often used with LiveData
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.fragment.ktx) // Provides viewModels delegate
+    implementation(libs.androidx.swiperefreshlayout) // Used for ML file refresh
 }
