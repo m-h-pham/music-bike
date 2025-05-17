@@ -27,6 +27,7 @@ class MusicFragment : Fragment() {
     private var isWheelSpeedAuto = false
     private var isPitchAuto = false
     private var isEventAuto = false
+    private var isHallDirectionAuto = false
 
     private var bleService: BleService? = null
 
@@ -34,6 +35,7 @@ class MusicFragment : Fragment() {
     private var speedObserver: Observer<Float>? = null
     private var pitchObserver: Observer<Float>? = null
     private var eventObserver: Observer<String>? = null
+    private var hallDirectionObserver: Observer<Int>? = null
 
     private fun isBleConnected(): Boolean {
         val mainActivity = activity as? MainActivity
@@ -73,16 +75,12 @@ class MusicFragment : Fragment() {
             binding.toggleButton.text = if (isPaused) "Play" else "Pause"
         }
 
-        // =========================
-        // Bank File Selection Setup
-        // =========================
+        // Bank Selector
         val bankSpinner = binding.bankSelector
         val allBanks = requireContext().assets.list("")?.filter {
             it.endsWith(".bank") && !it.endsWith("strings.bank")
         } ?: emptyList()
-
         val bankNames = allBanks.map { it.removeSuffix(".bank") }
-
         val bankAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, bankNames)
         bankAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         bankSpinner.adapter = bankAdapter
@@ -100,10 +98,8 @@ class MusicFragment : Fragment() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        // ==============================
         // Wheel Speed
-        // ==============================
-        setupSeekBar(binding.wheelSpeedSeekBar, binding.wheelSpeedLabel, "Wheel Speed", 100, 0, 0) {
+        setupSeekBar(binding.wheelSpeedSeekBar, binding.wheelSpeedLabel, "Wheel Speed", 25, 0, 0) {
             mainActivity?.setFMODParameter("Wheel Speed", it)
         }
 
@@ -138,9 +134,9 @@ class MusicFragment : Fragment() {
 
         // Event
         val events = arrayOf("None", "Jump", "Drop")
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, events)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.eventSpinner.adapter = adapter
+        val eventAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, events)
+        eventAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.eventSpinner.adapter = eventAdapter
 
         binding.eventSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
@@ -170,6 +166,39 @@ class MusicFragment : Fragment() {
             if (isChecked) observeEvent() else removeEventObserver()
         }
 
+        // Hall Direction
+        val hallDirectionOptions = arrayOf("Forward", "Reverse")
+        val hallAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, hallDirectionOptions)
+        hallAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.hallDirectionSpinner.adapter = hallAdapter
+
+        // Default to Forward
+        binding.hallDirectionSpinner.setSelection(0)
+        mainActivity?.setFMODParameter("Hall Direction", 1f)
+
+        binding.hallDirectionSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                if (!isHallDirectionAuto) {
+                    val value = if (position == 0) 1f else 0f
+                    mainActivity?.setFMODParameter("Hall Direction", value)
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        binding.hallDirectionModeSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
+            if (isChecked && !isBleConnected()) {
+                buttonView.isChecked = false
+                binding.hallDirectionSpinner.isEnabled = true
+                showToast("BLE not connected. Auto mode cancelled.")
+                return@setOnCheckedChangeListener
+            }
+            isHallDirectionAuto = isChecked
+            binding.hallDirectionSpinner.isEnabled = !isChecked
+            if (isChecked) observeHallDirection() else removeHallDirectionObserver()
+        }
+
         // Auto All
         binding.autoAllSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked && !isBleConnected()) {
@@ -181,6 +210,7 @@ class MusicFragment : Fragment() {
             binding.wheelSpeedModeSwitch.isChecked = isChecked
             binding.pitchModeSwitch.isChecked = isChecked
             binding.eventModeSwitch.isChecked = isChecked
+            binding.hallDirectionModeSwitch.isChecked = isChecked
         }
     }
 
@@ -212,7 +242,7 @@ class MusicFragment : Fragment() {
         removeWheelSpeedObserver()
         val mainActivity = activity as? MainActivity
         speedObserver = Observer {
-            val clamped = it.coerceIn(0f, 100f)
+            val clamped = it.coerceIn(0f, 25f)
             binding.wheelSpeedSeekBar.progress = clamped.toInt()
             binding.wheelSpeedLabel.text = "Wheel Speed: ${clamped.toInt()}"
             mainActivity?.setFMODParameter("Wheel Speed", clamped)
@@ -264,6 +294,23 @@ class MusicFragment : Fragment() {
         eventObserver = null
     }
 
+    private fun observeHallDirection() {
+        val source = bleService ?: return
+        removeHallDirectionObserver()
+        val mainActivity = activity as? MainActivity
+        hallDirectionObserver = Observer {
+            val index = if (it == 1) 0 else 1
+            binding.hallDirectionSpinner.setSelection(index)
+            mainActivity?.setFMODParameter("Hall Direction", it.toFloat())
+        }
+        source.hallDirection.observe(viewLifecycleOwner, hallDirectionObserver!!)
+    }
+
+    private fun removeHallDirectionObserver() {
+        hallDirectionObserver?.let { bleService?.hallDirection?.removeObserver(it) }
+        hallDirectionObserver = null
+    }
+
     private fun showToast(msg: String) {
         Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
     }
@@ -274,6 +321,7 @@ class MusicFragment : Fragment() {
         removeWheelSpeedObserver()
         removePitchObserver()
         removeEventObserver()
+        removeHallDirectionObserver()
         handler.removeCallbacksAndMessages(null)
     }
 
@@ -282,5 +330,4 @@ class MusicFragment : Fragment() {
         override fun onStartTrackingTouch(seekBar: SeekBar?) {}
         override fun onStopTrackingTouch(seekBar: SeekBar?) {}
     }
-
 }
