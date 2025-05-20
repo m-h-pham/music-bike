@@ -158,7 +158,7 @@ JNIEXPORT void JNICALL
 Java_com_app_musicbike_ui_activities_MainActivity_toggleFMODPlayback(JNIEnv *, jobject) {
     bool isPlaying = false;
     FMOD_STUDIO_PLAYBACK_STATE state;
-    if (eventInstance->getPlaybackState(&state) == FMOD_OK) {
+    if (eventInstance && eventInstance->getPlaybackState(&state) == FMOD_OK) {
         isPlaying = (state == FMOD_STUDIO_PLAYBACK_PLAYING);
     }
 
@@ -166,11 +166,20 @@ Java_com_app_musicbike_ui_activities_MainActivity_toggleFMODPlayback(JNIEnv *, j
         eventInstance->start(); // cold start if it hasn't played yet
     } else {
         bool isPaused = false;
-        eventInstance->getPaused(&isPaused);
-        eventInstance->setPaused(!isPaused);
-    }
+        if (eventInstance) {
+            eventInstance->getPaused(&isPaused);
+            eventInstance->setPaused(!isPaused);
+        }
 
+        // ✅ Pause/resume the entire master bus
+        FMOD::Studio::Bus* masterBus = nullptr;
+        if (studioSystem->getBus("bus:/", &masterBus) == FMOD_OK && masterBus) {
+            masterBus->setPaused(!isPaused);
+            LOGI("Master bus paused state set to %d", !isPaused);
+        }
+    }
 }
+
 
 JNIEXPORT void JNICALL
 Java_com_app_musicbike_ui_activities_MainActivity_playFMODEvent(JNIEnv *, jobject) {
