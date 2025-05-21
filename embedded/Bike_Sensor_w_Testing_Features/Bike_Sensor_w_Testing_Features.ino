@@ -102,6 +102,7 @@ const unsigned long directionDetectionTimeout = 500; // ms timeout to reset hall
 #define IMU_DIRECTION_CHARACTERISTIC_UUID "ceb04cf6-0555-4243-a27b-c85986ab4bd7"
 #define HALL_DIRECTION_CHARACTERISTIC_UUID "f231de63-475c-463d-9b3f-f338d7458bb9"
 #define IMU_SPEED_STATE_CHARACTERISTIC_UUID "738f5e54-5479-4941-ae13-caf4a9b07b2e"
+#define ACCELEROMETER_ZERO_CHARACTERISTIC_UUID "a29ff0d6-5bf9-4878-83f0-9f66a7e35a15"
 
 //==============================================================================
 // GLOBAL VARIABLES (Shared Data) & MUTEXES
@@ -151,6 +152,7 @@ BLECharacteristic* pEventCharacteristic = NULL; // Declaration added
 BLECharacteristic* pImuDirectionCharacteristic = NULL; // Declaration added
 BLECharacteristic* pHallDirectionCharacteristic = NULL;// Declaration added
 BLECharacteristic* pImuSpeedStateCharacteristic = NULL; // Declaration added
+BLECharacteristic* pAccelerometerZeroCharacteristic = NULL;
 
 // --- Display Object (Global) ---
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET); // Now uses defines
@@ -186,6 +188,38 @@ class MyServerCallbacks: public BLEServerCallbacks {
         vTaskDelay(pdMS_TO_TICKS(500));
         pServer->startAdvertising();
         Serial.println("BLE Advertising restarted");
+    }
+};
+
+// Callback class for accelerometer zero characteristic
+class AccelerometerZeroCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+        std::string value = pCharacteristic->getValue().c_str();
+        if (value.length() > 0) {
+            // Any non-zero value will trigger the zero reset
+            if (value[0] != 0) {
+                Serial.println(">>> BLE Zero Command Received!");
+                
+                // Get current orientation values
+                float current_raw_pitch = 0.0, current_raw_roll = 0.0, current_raw_yaw = 0.0;
+                
+                if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) {
+                    current_raw_pitch = pitch;
+                    current_raw_roll = roll;
+                    current_raw_yaw = yaw;
+                    xSemaphoreGive(imuDataMutex);
+                    
+                    // Update offsets
+                    if (xSemaphoreTake(offsetMutex, portMAX_DELAY) == pdTRUE) {
+                        pitchOffset = current_raw_pitch;
+                        rollOffset = current_raw_roll;
+                        yawOffset = current_raw_yaw;
+                        xSemaphoreGive(offsetMutex);
+                        Serial.println(">>> BLE Zero: SUCCESS - Zero position offsets updated!");
+                    }
+                }
+            }
+        }
     }
 };
 
@@ -878,6 +912,13 @@ void setup() {
     pImuSpeedStateCharacteristic->addDescriptor(new BLE2902());
     pGForceCharacteristic = pService->createCharacteristic(GFORCE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     pGForceCharacteristic->addDescriptor(new BLE2902());
+
+    pAccelerometerZeroCharacteristic = pService->createCharacteristic(
+        ACCELEROMETER_ZERO_CHARACTERISTIC_UUID, 
+        BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
+    );
+    pAccelerometerZeroCharacteristic->addDescriptor(new BLE2902());
+    pAccelerometerZeroCharacteristic->setCallbacks(new AccelerometerZeroCallbacks());
 
     pService->start();
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();

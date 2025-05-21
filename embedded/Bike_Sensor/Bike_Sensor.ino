@@ -12,6 +12,7 @@
 // #include <tensorflow/lite/micro/micro_error_reporter.h>
 // #include <tensorflow/lite/micro/micro_interpreter.h>
 // #include <tensorflow/lite/schema/schema_generated.h>
+// #include "model_data.h"
 
 // --- FreeRTOS Includes ---
 #include "freertos/FreeRTOS.h"
@@ -130,9 +131,31 @@ unsigned long lastDropTime = 0;
 bool lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 
+// -- TensorFlow Global Variables ---
+// const int numSamples = MAX_SAMPLE_LENGTH;
+float sampleRate = 100.0;
+unsigned long sampleInterval;   // Will be calculated based on sample rate
+
+// Sliding window parameters
+int overlapPercentage = 50;     // Adjustable: percentage of overlap (0-90)
+int slidingStep;                // Will be calculated based on overlap percentage
+unsigned long lastSampleTime = 0;
+int samplesRead = 0;            // Start from 0 to collect a full set of samples
+// tflite::MicroErrorReporter tflErrorReporter;
+// tflite::AllOpsResolver tflOpsResolver;
+// const tflite::Model* tflModel = nullptr;
+// tflite::MicroInterpreter* tflInterpreter = nullptr;
+// TfLiteTensor* tflInputTensor = nullptr;
+// TfLiteTensor* tflOutputTensor = nullptr;
+
+// Create a static memory buffer for TFLM, the size may need to
+// be adjusted based on the model
+// constexpr int tensorArenaSize = 100 * 1024;
+// byte tensorArena[tensorArenaSize] __attribute__((aligned(16)));
+
 // --- BLE State (Protected by bleConnectionMutex) ---
 volatile bool deviceConnected = false; // Volatile because modified by ISR/Callback context
-bool oldDeviceConnected = false;      // Only used within BLE task, maybe make local?
+bool oldDeviceConnected = false;       // Only used within BLE task, maybe make local?
 
 // --- BLE Objects (Global, initialized in setup) ---
 BLEServer* pServer = NULL;
@@ -183,7 +206,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
     }
 };
 
-// Add new callback class for accelerometer zero characteristic
+// Callback class for accelerometer zero characteristic
 class AccelerometerZeroCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
         std::string value = pCharacteristic->getValue().c_str();
@@ -434,7 +457,6 @@ void hallSensorTask(void *pvParameters) {
              }
         }
 
-
         // Update last values for next iteration
         lastHallSensorValue = currentHallValue;
         lastHallSensorValue2 = currentHallValue2;
@@ -442,7 +464,6 @@ void hallSensorTask(void *pvParameters) {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }
 }
-
 
 //------------------------------------------------------------------------------
 // Task: Process Data, Detect Events, Handle Button
@@ -556,7 +577,6 @@ void processingTask(void *pvParameters) {
         vTaskDelayUntil(&xLastWakeTime, xFrequency); // Wait for next cycle
     } // End while(1)
 } // End processingTask
-
 
 //------------------------------------------------------------------------------
 // Task: Handle BLE Notifications
@@ -674,7 +694,6 @@ void bleTask(void *pvParameters) {
     }
 }
 
-
 //------------------------------------------------------------------------------
 // Task: Update OLED Display
 //------------------------------------------------------------------------------
@@ -702,7 +721,6 @@ void displayTask(void *pvParameters) {
           if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) { local_pitch = pitch; local_roll = roll; local_yaw = yaw; local_gForce = gForce; xSemaphoreGive(imuDataMutex); } else { vTaskDelay(1); continue; }
           if (xSemaphoreTake(offsetMutex, portMAX_DELAY) == pdTRUE) { local_pitchOffset = pitchOffset; local_rollOffset = rollOffset; local_yawOffset = yawOffset; xSemaphoreGive(offsetMutex); } else { vTaskDelay(1); continue; }
           if (xSemaphoreTake(eventDataMutex, portMAX_DELAY) == pdTRUE) { local_jump = jumpDetected; local_drop = dropDetected; xSemaphoreGive(eventDataMutex); } else { vTaskDelay(1); continue; }
-
 
          // --- Calculate Zeroed Values ---
          float zeroedPitch = local_pitch - local_pitchOffset;
