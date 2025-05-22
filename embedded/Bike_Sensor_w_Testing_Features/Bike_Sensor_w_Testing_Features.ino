@@ -35,15 +35,15 @@
 //==============================================================================
 
 // Pin definitions
-#define SDA_PIN 8
-#define SCL_PIN 9
-#define ZERO_BUTTON_PIN 17
-#define HALL_SENSOR_PIN 15
-#define HALL_SENSOR_PIN_2 16 // Pin for the second Hall sensor
-#define BLE_LED_PIN 18       // Pin for the blue BLE connection indicator LED
-#define JUMP_THRESH_POT_PIN 5 
-#define LAND_THRESH_POT_PIN 6
-#define DROP_THRESH_POT_PIN 7
+#define SDA_PIN 18
+#define SCL_PIN 15
+#define ZERO_BUTTON_PIN 8
+#define HALL_SENSOR_PIN 9
+#define HALL_SENSOR_PIN_2 46 
+#define BLE_LED_PIN 3
+#define JUMP_THRESH_POT_PIN 12 
+#define LAND_THRESH_POT_PIN 11
+#define DROP_THRESH_POT_PIN 10
 
 // Threshold variables
 // Default values, will be overwritten by potentiometers
@@ -845,7 +845,7 @@ void displayTask(void *pvParameters) {
 //==============================================================================
 void setup() {
     Serial.begin(115200);
-    while (!Serial);
+    //while (!Serial); // Waits for USB Serial connection; comment out for standalone/battery operation.
     Serial.println("Music Bike Sensor System Initializing");
 
     // --- Initialize Hardware Pins ---
