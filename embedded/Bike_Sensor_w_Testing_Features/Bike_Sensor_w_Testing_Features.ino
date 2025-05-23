@@ -35,21 +35,24 @@
 //==============================================================================
 
 // Pin definitions
-#define SDA_PIN 8
-#define SCL_PIN 9
-#define ZERO_BUTTON_PIN 17
-#define HALL_SENSOR_PIN 15
-#define HALL_SENSOR_PIN_2 16 // Pin for the second Hall sensor
-#define BLE_LED_PIN 18       // Pin for the blue BLE connection indicator LED
-#define JUMP_THRESH_POT_PIN 5 
-#define LAND_THRESH_POT_PIN 6
-#define DROP_THRESH_POT_PIN 7
+#define SDA_PIN 18
+#define SCL_PIN 15
+#define ZERO_BUTTON_PIN 8
+#define HALL_SENSOR_PIN 9
+#define HALL_SENSOR_PIN_2 46 
+#define BLE_LED_PIN 3
+#define JUMP_THRESH_POT_PIN 12 
+#define LAND_THRESH_POT_PIN 11
+#define DROP_THRESH_POT_PIN 10
 
 // Threshold variables
 // Default values, will be overwritten by potentiometers
 float jumpThreshold = 0.5;      // gForce check (< threshold for takeoff)
 float landingThreshold = 2.0;   // gForce check (> threshold for landing)
 float dropThreshold = 2.5;      // gForce check (> threshold spike for drop)
+
+// Rolling average size
+#define AVG_SIZE 20
 
 //Define tunable ranges for potentiometers
 #define JUMP_THRESH_MIN 0.1f
@@ -117,8 +120,12 @@ SemaphoreHandle_t bleConnectionMutex = NULL; // Protect deviceConnected flag
 SemaphoreHandle_t configMutex = NULL; // Mutex for tunable config variables
 
 // --- IMU Data (Protected by imuDataMutex) ---
-float pitch = 0.0, roll = 0.0, yaw = 0.0;
-float gForce = 1.0; // Initialize to 1g
+// Average over 10 readings
+float pitch[AVG_SIZE], roll[AVG_SIZE], yaw[AVG_SIZE];
+float pitchAvg = 0.0, rollAvg = 0.0, yawAvg = 0.0;
+float gForce[AVG_SIZE]; 
+float gForceAvg = 1.0; // Initialize to 1g
+
 float accelX = 0.0, accelY = 0.0, accelZ = 0.0; // Raw scaled accel
 float gyroX = 0.0, gyroY = 0.0, gyroZ = 0.0;   // Raw scaled gyro
 
@@ -126,7 +133,8 @@ float gyroX = 0.0, gyroY = 0.0, gyroZ = 0.0;   // Raw scaled gyro
 float pitchOffset = 0.0, rollOffset = 0.0, yawOffset = 0.0;
 
 // --- Hall Sensor Data (Protected by hallDataMutex) ---
-float currentSpeed = 0.0;          // km/h
+float currentSpeed[AVG_SIZE];          // km/h
+float currentSpeedAvg = 0.0;
 bool hallDirectionForward = true;
 int hallSensorValue = HIGH;       // Current raw value
 int hallSensorValue2 = HIGH;      // Current raw value 2
@@ -204,9 +212,9 @@ class AccelerometerZeroCallbacks: public BLECharacteristicCallbacks {
                 float current_raw_pitch = 0.0, current_raw_roll = 0.0, current_raw_yaw = 0.0;
                 
                 if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) {
-                    current_raw_pitch = pitch;
-                    current_raw_roll = roll;
-                    current_raw_yaw = yaw;
+                    current_raw_pitch = pitchAvg;
+                    current_raw_roll = rollAvg;
+                    current_raw_yaw = yawAvg;
                     xSemaphoreGive(imuDataMutex);
                     
                     // Update offsets
@@ -222,6 +230,23 @@ class AccelerometerZeroCallbacks: public BLECharacteristicCallbacks {
         }
     }
 };
+
+//==============================================================================
+// HELPER FUNCTIONS
+//==============================================================================
+
+// Updates array of rolling average and returns new rolling average value
+float updateRollingAverage(float array[], float newVal) {
+  for (int i = 0; i < AVG_SIZE - 1; i++) {
+    array[i] = array[i + 1];
+  }
+  array[AVG_SIZE - 1] = newVal;
+  float sum = 0.0;
+  for (int i = 0; i < AVG_SIZE; i++) {
+    sum += array[i];
+  }
+  return sum / AVG_SIZE;
+}
 
 //==============================================================================
 // TASK FUNCTIONS (Code within tasks now uses defines)
@@ -319,10 +344,11 @@ void imuTask(void *pvParameters) {
 
         // --- Update Shared Variables (Protected by Mutex) ---
         if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) {
-            pitch = local_pitch;
-            roll = local_roll;
-            yaw = local_yaw;
-            gForce = local_gForce;
+            pitchAvg = updateRollingAverage(pitch, local_pitch);
+            rollAvg = updateRollingAverage(roll, local_roll);
+            yawAvg = updateRollingAverage(yaw, local_yaw);
+            gForceAvg = updateRollingAverage(gForce, local_gForce);
+
             accelX = local_ax;
             accelY = local_ay;
             accelZ = local_az;
@@ -420,7 +446,7 @@ void hallSensorTask(void *pvParameters) {
         if (currentMillis - lastTriggerTime > SPEED_TIMEOUT) { // Uses define
              // Only update if speed needs changing to 0
              if (xSemaphoreTake(hallDataMutex, portMAX_DELAY) == pdTRUE) {
-                if (currentSpeed != 0.0f) {
+                if (currentSpeedAvg != 0.0f) {
                    local_speed = 0.0f; // Prepare to update speed to 0
                    speed_updated = true;
                 }
@@ -435,7 +461,7 @@ void hallSensorTask(void *pvParameters) {
         if (speed_updated || direction_updated) { // Only take mutex if there's something to update
              if (xSemaphoreTake(hallDataMutex, portMAX_DELAY) == pdTRUE) {
                  if(speed_updated) {
-                    currentSpeed = local_speed;
+                    currentSpeedAvg = updateRollingAverage(currentSpeed, local_speed);
                  }
                  if(direction_updated) {
                     hallDirectionForward = local_direction;
@@ -542,8 +568,8 @@ void processingTask(void *pvParameters) {
         // --- Get IMU data ---
         if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) {
             local_accelX = accelX; local_accelY = accelY; local_accelZ = accelZ;
-            local_gForce = gForce;
-            local_pitch = pitch;
+            local_gForce = gForceAvg;
+            local_pitch = pitchAvg;
             xSemaphoreGive(imuDataMutex);
         } else {
             Serial.println("Warning: processingTask failed to get imuDataMutex!");
@@ -647,9 +673,9 @@ void processingTask(void *pvParameters) {
         if (button_pressed) {
             float current_raw_pitch=0.0, current_raw_roll=0.0, current_raw_yaw=0.0;
             if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) {
-                 current_raw_pitch = pitch; 
-                 current_raw_roll = roll; 
-                 current_raw_yaw = yaw;
+                 current_raw_pitch = pitchAvg; 
+                 current_raw_roll = rollAvg; 
+                 current_raw_yaw = yawAvg;
                  xSemaphoreGive(imuDataMutex);
                  if (xSemaphoreTake(offsetMutex, portMAX_DELAY) == pdTRUE) {
                      pitchOffset = current_raw_pitch;
@@ -707,8 +733,8 @@ void bleTask(void *pvParameters) {
             int local_imuState=0;
             // Note: Thresholds are not currently sent over BLE, but could be added if needed
 
-             if (xSemaphoreTake(hallDataMutex, portMAX_DELAY) == pdTRUE) { local_speed = currentSpeed; local_hallDir = hallDirectionForward; xSemaphoreGive(hallDataMutex); } else { vTaskDelay(1); continue; }
-             if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) { local_pitch = pitch; local_roll = roll; local_yaw = yaw; local_gForce = gForce; xSemaphoreGive(imuDataMutex); } else { vTaskDelay(1); continue; }
+             if (xSemaphoreTake(hallDataMutex, portMAX_DELAY) == pdTRUE) { local_speed = currentSpeedAvg; local_hallDir = hallDirectionForward; xSemaphoreGive(hallDataMutex); } else { vTaskDelay(1); continue; }
+             if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) { local_pitch = pitchAvg; local_roll = rollAvg; local_yaw = yawAvg; local_gForce = gForceAvg; xSemaphoreGive(imuDataMutex); } else { vTaskDelay(1); continue; }
              if (xSemaphoreTake(offsetMutex, portMAX_DELAY) == pdTRUE) { local_pitchOffset = pitchOffset; local_rollOffset = rollOffset; local_yawOffset = yawOffset; xSemaphoreGive(offsetMutex); } else { vTaskDelay(1); continue; }
              if (xSemaphoreTake(eventDataMutex, portMAX_DELAY) == pdTRUE) { local_jump = jumpDetected; local_drop = dropDetected; local_imuDir = imuDirectionForward; local_imuState = imuSpeedState; xSemaphoreGive(eventDataMutex); } else { vTaskDelay(1); continue; }
 
@@ -785,8 +811,8 @@ void displayTask(void *pvParameters) {
 
          // Read state variables using mutexes
          if (xSemaphoreTake(bleConnectionMutex, portMAX_DELAY) == pdTRUE) { isConnected = deviceConnected; xSemaphoreGive(bleConnectionMutex); } else { vTaskDelay(1); continue; }
-         if (xSemaphoreTake(hallDataMutex, portMAX_DELAY) == pdTRUE) { local_speed = currentSpeed; local_hallDir = hallDirectionForward; xSemaphoreGive(hallDataMutex); } else { vTaskDelay(1); continue; }
-         if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) { local_pitch = pitch; local_gForce = gForce; /*Removed roll, yaw reads*/ xSemaphoreGive(imuDataMutex); } else { vTaskDelay(1); continue; }
+         if (xSemaphoreTake(hallDataMutex, portMAX_DELAY) == pdTRUE) { local_speed = currentSpeedAvg; local_hallDir = hallDirectionForward; xSemaphoreGive(hallDataMutex); } else { vTaskDelay(1); continue; }
+         if (xSemaphoreTake(imuDataMutex, portMAX_DELAY) == pdTRUE) { local_pitch = pitchAvg; local_gForce = gForceAvg; /*Removed roll, yaw reads*/ xSemaphoreGive(imuDataMutex); } else { vTaskDelay(1); continue; }
          if (xSemaphoreTake(offsetMutex, portMAX_DELAY) == pdTRUE) { local_pitchOffset = pitchOffset; /*Removed roll, yaw offset reads*/ xSemaphoreGive(offsetMutex); } else { vTaskDelay(1); continue; }
          if (xSemaphoreTake(eventDataMutex, portMAX_DELAY) == pdTRUE) { local_jump = jumpDetected; local_drop = dropDetected; xSemaphoreGive(eventDataMutex); } else { vTaskDelay(1); continue; }
          // ** NEW: Read thresholds **
@@ -844,8 +870,16 @@ void displayTask(void *pvParameters) {
 // SETUP FUNCTION
 //==============================================================================
 void setup() {
+    // Zero rolling average arrays
+    for (int i = 0; i < AVG_SIZE; i++) {
+        pitch[i] = 0.0;
+        roll[i] = 0.0;
+        yaw[i] = 0.0;
+        gForce[i] = 0.0;
+        currentSpeed[i] = 0.0;
+    }
     Serial.begin(115200);
-    while (!Serial);
+    //while (!Serial); // Waits for USB Serial connection; comment out for standalone/battery operation.
     Serial.println("Music Bike Sensor System Initializing");
 
     // --- Initialize Hardware Pins ---
