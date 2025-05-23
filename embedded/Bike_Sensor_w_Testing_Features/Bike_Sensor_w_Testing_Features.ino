@@ -52,7 +52,8 @@ float landingThreshold = 2.0;   // gForce check (> threshold for landing)
 float dropThreshold = 2.5;      // gForce check (> threshold spike for drop)
 
 // Rolling average size
-#define AVG_SIZE 20
+#define AVG_SIZE 50
+#define THRESHOLD 5.0f
 
 //Define tunable ranges for potentiometers
 #define JUMP_THRESH_MIN 0.1f
@@ -237,15 +238,28 @@ class AccelerometerZeroCallbacks: public BLECharacteristicCallbacks {
 
 // Updates array of rolling average and returns new rolling average value
 float updateRollingAverage(float array[], float newVal) {
-  for (int i = 0; i < AVG_SIZE - 1; i++) {
-    array[i] = array[i + 1];
-  }
-  array[AVG_SIZE - 1] = newVal;
-  float sum = 0.0;
-  for (int i = 0; i < AVG_SIZE; i++) {
-    sum += array[i];
-  }
-  return sum / AVG_SIZE;
+    float alpha = 2.0f / (AVG_SIZE + 1);
+    
+    // Calculate current average
+    float currentAvg = 0.0f;
+    for (int i = 0; i < AVG_SIZE; i++) {
+        currentAvg += array[i];
+    }
+    currentAvg /= AVG_SIZE;
+
+    // Spike rejection: if newVal deviates too much, ignore it
+    if (fabs(newVal - currentAvg) > THRESHOLD) {
+        newVal = currentAvg;
+    }
+    float newEMA = alpha * newVal + (1 - alpha) * array[AVG_SIZE - 1];
+
+    // Shift array and update last value
+    for (int i = 0; i < AVG_SIZE - 1; i++) {
+        array[i] = array[i + 1];
+    }
+    array[AVG_SIZE - 1] = newEMA;
+
+    return newEMA;
 }
 
 //==============================================================================
