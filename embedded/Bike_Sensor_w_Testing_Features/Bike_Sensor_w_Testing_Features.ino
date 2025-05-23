@@ -52,7 +52,7 @@ float landingThreshold = 2.0;   // gForce check (> threshold for landing)
 float dropThreshold = 2.5;      // gForce check (> threshold spike for drop)
 
 // Rolling average size
-#define AVG_SIZE 20
+#define AVG_SIZE 50
 
 //Define tunable ranges for potentiometers
 #define JUMP_THRESH_MIN 0.1f
