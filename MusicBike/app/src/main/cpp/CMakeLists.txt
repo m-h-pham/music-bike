@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.4.1)
+project(musicbikeFMOD)
 
 # Assuming CMakeLists.txt is in app/src/main/cpp/
 # and jniLibs is in app/

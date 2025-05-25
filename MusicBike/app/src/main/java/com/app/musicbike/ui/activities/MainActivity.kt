@@ -4,11 +4,13 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -16,6 +18,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.app.musicbike.R
 import com.app.musicbike.databinding.ActivityMainBinding
 import com.app.musicbike.services.BleService
+import com.app.musicbike.services.MusicService
 import com.app.musicbike.ui.adapter.ViewPagerAdapter
 import com.app.musicbike.ui.fragments.DevicesFragment
 import com.app.musicbike.ui.fragments.MusicFragment
@@ -24,87 +27,95 @@ import com.google.android.material.tabs.TabLayoutMediator
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
-    private val TAG = "MainActivity" // Keep TAG for logging
+    private val TAG = "MainActivity"
     private lateinit var binding: ActivityMainBinding
-    private var bound = false
+
+    private var bleServiceBound = false
     private var bleService: BleService? = null
-    var isServiceConnected = false
+    var isBleServiceConnected = false // Renamed for clarity
         private set
 
-    private val serviceConnection = object : ServiceConnection {
+    private var musicServiceBound = false
+    private var musicService: MusicService? = null
+    var isMusicServiceConnected = false
+        private set
+
+    private val bleServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            // --- ADD LOG HERE ---
-            Log.d(TAG, "onServiceConnected: Service connection established.")
-            // --- END LOG ---
-
-            val binder = service as BleService.LocalBinder
-            bleService = binder.getService()
-            bound = true
-            isServiceConnected = true
-            Log.d(TAG, "Service connected variable set.") // Existing log
-
-            Log.d(TAG, "bleService reference set: $bleService")
-            Log.d(TAG, "bleService.connectionStatus = ${bleService?.connectionStatus?.value}")
-
-            notifyDevicesFragmentServiceReady() // Call the notification function
-            notifyMusicFragmentServiceReady()   // Call the function
-
+            Log.d(TAG, "onServiceConnected: BleService connection established.")
+            val binder = service as? BleService.LocalBinder // Use safe cast
+            if (binder != null) {
+                bleService = binder.getService() // This should now resolve if BleService.LocalBinder is correct
+                bleServiceBound = true
+                isBleServiceConnected = true
+                Log.d(TAG, "BleService connected variable set: $isBleServiceConnected")
+                notifyDevicesFragmentBleServiceReady()
+                notifyMusicFragmentBleServiceReady()
+            } else {
+                Log.e(TAG, "Failed to cast binder to BleService.LocalBinder")
+                isBleServiceConnected = false // Ensure this is false if cast fails
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            // --- ADD LOG HERE ---
-            Log.w(TAG, "onServiceDisconnected: Service connection lost.")
-            // --- END LOG ---
+            Log.w(TAG, "onServiceDisconnected: BleService connection lost.")
             bleService = null
-            bound = false
-            isServiceConnected = false
-            Log.d(TAG, "Service disconnected variable set.") // Existing log
+            bleServiceBound = false
+            isBleServiceConnected = false
         }
     }
 
-    companion object {
-        init {
-            try {
-                Log.d("FMOD", "Attempting to load FMOD library...")
-                System.loadLibrary("fmod")
-                System.loadLibrary("fmodstudio")
-                System.loadLibrary("musicbike") // YOUR native library!
-                Log.d("FMOD", "FMOD library loaded successfully.")
-            } catch (e: UnsatisfiedLinkError) {
-                Log.e("FMOD", "Failed to load FMOD library.", e)
+    private val musicServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            Log.d(TAG, "onServiceConnected: MusicService connection established.")
+            val binder = service as? MusicService.LocalBinder // Use safe cast
+            if (binder != null) {
+                musicService = binder.getService()
+                musicServiceBound = true
+                isMusicServiceConnected = true
+                Log.d(TAG, "MusicService connected variable set: $isMusicServiceConnected")
+
+                val masterBankPath = copyAssetToInternalStorage("Master.bank")
+                val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
+                Log.d(TAG, "MusicService connected, commanding it to load initial banks.")
+                musicService?.loadBank(masterBankPath, stringsBankPath)
+                notifyMusicFragmentMusicServiceReady()
+            } else {
+                Log.e(TAG, "Failed to cast binder to MusicService.LocalBinder")
+                isMusicServiceConnected = false
             }
         }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            Log.w(TAG, "onServiceDisconnected: MusicService connection lost.")
+            musicService = null
+            musicServiceBound = false
+            isMusicServiceConnected = false
+        }
     }
 
-    external fun startFMODPlayback(masterBankPath: String, stringsBankPath: String)
-
-    external fun setFMODParameter(paramName: String, value: Float)
-
-    external fun toggleFMODPlayback()
-
-    external fun playFMODEvent()
-
-    external fun isFMODPaused(): Boolean
-
+    // FMOD JNI related code has been moved to MusicService
+    // companion object { /* ... */ }
+    // external fun ...
 
     private fun copyAssetToInternalStorage(assetName: String): String {
         val file = File(filesDir, assetName)
-
-        // Always delete the old bank file to ensure updated version is copied
         if (file.exists()) {
             file.delete()
-            Log.d(TAG, "Deleted existing $assetName to ensure updated bank is used.")
         }
-
-        // Copy the asset into internal storage
-        assets.open(assetName).use { inputStream ->
-            file.outputStream().use { outputStream ->
-                inputStream.copyTo(outputStream)
+        try {
+            assets.open(assetName).use { inputStream ->
+                file.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy asset $assetName", e)
+            return ""
         }
-
         return file.absolutePath
     }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,73 +126,81 @@ class MainActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         ViewCompat.setOnApplyWindowInsetsListener(toolbar) { view, insets ->
             val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            view.setPadding(
-                view.paddingLeft,
-                statusBarHeight,
-                view.paddingRight,
-                view.paddingBottom
-            )
+            view.setPadding(view.paddingLeft, statusBarHeight, view.paddingRight, view.paddingBottom)
             insets
         }
-        toolbar.requestApplyInsets() // Force insets to be applied immediately
+        toolbar.requestApplyInsets()
         setupViewPager()
-        Log.d(TAG, "onCreate: Calling bindToService...") // Log before binding
-        bindToService()
 
-        org.fmod.FMOD.init(this);
-        val result = org.fmod.FMOD.checkInit()
-        Log.d("FMOD", "FMOD init result: $result")
+        Log.d(TAG, "onCreate: Starting and binding to BleService...")
+        startAndBindBleService()
 
+        Log.d(TAG, "onCreate: Starting and binding to MusicService...")
+        startAndBindMusicService()
 
-        val masterBankPath = copyAssetToInternalStorage("Master.bank")
-        val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
+        // FMOD init is now handled by MusicService
+    }
 
-        Log.d(TAG, "Calling startFMODPlayback() with bank paths")
+    private fun startAndBindBleService() {
+        val serviceIntent = Intent(this, BleService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(this, serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+        bindService(serviceIntent, bleServiceConnection, Context.BIND_AUTO_CREATE)
+    }
 
-        startFMODPlayback(masterBankPath, stringsBankPath)
-        setFMODParameter("Wheel Speed", 0.0f)
+    private fun startAndBindMusicService() {
+        val serviceIntent = Intent(this, MusicService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(this, serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+        bindService(serviceIntent, musicServiceConnection, Context.BIND_AUTO_CREATE)
     }
 
     fun getBleServiceInstance(): BleService? {
-        return if (bound) bleService else null
+        return if (bleServiceBound) bleService else null
     }
 
-    private fun notifyDevicesFragmentServiceReady() {
-        // --- ADD LOG HERE ---
-        Log.d(TAG, "notifyDevicesFragmentServiceReady: Attempting to find and notify fragment...")
-        // --- END LOG ---
-        val devicesFragmentPosition = 2
-        val fragmentTag = "f$devicesFragmentPosition"
-        val fragment = supportFragmentManager.findFragmentByTag(fragmentTag)
+    fun getMusicServiceInstance(): MusicService? {
+        return if (musicServiceBound) musicService else null
+    }
 
+    private fun notifyDevicesFragmentBleServiceReady() {
+        val fragment = supportFragmentManager.findFragmentByTag("f2")
         if (fragment is DevicesFragment) {
-            Log.d(TAG, "notifyDevicesFragmentServiceReady: Found DevicesFragment, calling onServiceReady().") // Existing log modified slightly
             fragment.onServiceReady()
         } else {
-            Log.w(TAG, "notifyDevicesFragmentServiceReady: Could not find DevicesFragment with tag $fragmentTag.") // Existing log modified slightly
+            Log.w(TAG, "notifyDevicesFragmentBleServiceReady: Could not find DevicesFragment (f2).")
         }
     }
 
-    private fun notifyMusicFragmentServiceReady() {
-        val musicFragmentPosition = 0
-        val fragmentTag = "f$musicFragmentPosition"
-        val fragment = supportFragmentManager.findFragmentByTag(fragmentTag)
-
+    private fun notifyMusicFragmentBleServiceReady() { // For BleService
+        val fragment = supportFragmentManager.findFragmentByTag("f0")
         if (fragment is MusicFragment) {
-            Log.d(TAG, "notifyMusicFragmentServiceReady: Found MusicFragment, calling onServiceReady().")
             fragment.onServiceReady()
         } else {
-            Log.w(TAG, "notifyMusicFragmentServiceReady: Could not find MusicFragment with tag $fragmentTag.")
+            Log.w(TAG, "notifyMusicFragmentBleServiceReady: Could not find MusicFragment (f0).")
+        }
+    }
+
+    private fun notifyMusicFragmentMusicServiceReady() { // For MusicService
+        val fragment = supportFragmentManager.findFragmentByTag("f0")
+        if (fragment is MusicFragment) {
+            fragment.onMusicServiceReady(musicService) // Pass the MusicService instance
+        } else {
+            Log.w(TAG, "notifyMusicFragmentMusicServiceReady: Could not find MusicFragment (f0).")
         }
     }
 
     private fun setupViewPager() {
-        // ... (rest of setupViewPager is unchanged) ...
         val adapter = ViewPagerAdapter(supportFragmentManager, lifecycle)
         val viewPager: ViewPager2 = binding.viewPager
         val tabLayout: TabLayout = binding.tabLayout
         viewPager.adapter = adapter
-
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.text = when (position) {
                 0 -> "Music"
@@ -192,22 +211,17 @@ class MainActivity : AppCompatActivity() {
         }.attach()
     }
 
-    private fun bindToService() {
-        Intent(this, BleService::class.java).also { intent ->
-            Log.d(TAG, "bindToService: Binding...") // Log when bindService is called
-            bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-        }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "onDestroy: Unbinding service if bound.") // Log before unbinding
-        if (bound) {
-            unbindService(serviceConnection)
-            bound = false
-            isServiceConnected = false
+        if (bleServiceBound) {
+            unbindService(bleServiceConnection)
+            bleServiceBound = false
         }
-
-        org.fmod.FMOD.close();
+        if (musicServiceBound) {
+            unbindService(musicServiceConnection)
+            musicServiceBound = false
+        }
+        // FMOD.close() is now handled by MusicService
+        Log.d(TAG, "MainActivity onDestroy completed.")
     }
 }

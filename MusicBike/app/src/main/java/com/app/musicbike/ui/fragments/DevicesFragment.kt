@@ -77,7 +77,7 @@ class DevicesFragment : Fragment() {
         setupButtonClickListeners()
         binding.statusTextDevices.text = "Status: Initializing..."
         // Try to get service immediately if activity already has it
-        if ((activity as? MainActivity)?.isServiceConnected == true) {
+        if ((activity as? MainActivity)?.isBleServiceConnected == true) {
             onServiceReady()
         }
     }

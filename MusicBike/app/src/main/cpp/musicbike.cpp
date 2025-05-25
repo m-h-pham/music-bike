@@ -6,10 +6,12 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <string> // Required for std::string
 
-#define LOG_TAG "FMOD_JNI"
+#define LOG_TAG "FMOD_JNI_MusicService"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 
 // Global variables
 FMOD::Studio::System* studioSystem = nullptr;
@@ -21,7 +23,7 @@ std::mutex fmodMutex;
 // Helper function to check FMOD errors
 bool checkFMODError(FMOD_RESULT result, const char* function) {
     if (result != FMOD_OK) {
-        LOGE("%s failed: %s", function, FMOD_ErrorString(result));
+        LOGE("%s failed: %s (%d)", function, FMOD_ErrorString(result), result);
         return false;
     }
     return true;
@@ -29,192 +31,287 @@ bool checkFMODError(FMOD_RESULT result, const char* function) {
 
 // Background thread function to update FMOD
 void fmodUpdateThread() {
-    LOGI("FMOD update thread started");
-    while (isRunning) {
+    LOGI("FMOD update thread started.");
+    while (isRunning.load(std::memory_order_relaxed)) {
         {
             std::lock_guard<std::mutex> lock(fmodMutex);
             if (studioSystem) {
                 studioSystem->update();
+            } else {
+                LOGW("FMOD update thread: studioSystem is null, exiting thread.");
+                break;
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 fps
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
-    LOGI("FMOD update thread stopped");
+    LOGI("FMOD update thread finished.");
 }
 
 extern "C" {
 
-// Updated function with two jstring parameters
 JNIEXPORT void JNICALL
-Java_com_app_musicbike_ui_activities_MainActivity_startFMODPlayback(JNIEnv *env, jobject obj,
-                                                                    jstring masterBankPath,
-                                                                    jstring stringsBankPath) {
-    const char *masterBankPathCStr = env->GetStringUTFChars(masterBankPath, 0);
-    const char *stringsBankPathCStr = env->GetStringUTFChars(stringsBankPath, 0);
+Java_com_app_musicbike_services_MusicService_nativeStartFMODPlayback(
+        JNIEnv *env,
+        jobject thiz,
+        jstring masterBankPathJava,
+        jstring stringsBankPathJava) {
+    const char *masterBankPathCStr = env->GetStringUTFChars(masterBankPathJava, 0);
+    const char *stringsBankPathCStr = env->GetStringUTFChars(stringsBankPathJava, 0);
 
-    LOGI("startFMODPlayback called with Master bank path: %s", masterBankPathCStr);
+    LOGI("nativeStartFMODPlayback: Called with Master: %s", masterBankPathCStr);
 
     std::lock_guard<std::mutex> lock(fmodMutex);
     FMOD_RESULT result;
 
-    // Initialize FMOD system if not already
     if (studioSystem == nullptr) {
+        LOGI("nativeStartFMODPlayback: Studio System is null, creating and initializing.");
         result = FMOD::Studio::System::create(&studioSystem);
-        if (!checkFMODError(result, "System::create")) return;
-
-        result = studioSystem->initialize(128, FMOD_STUDIO_INIT_NORMAL, FMOD_INIT_NORMAL, nullptr);
-        if (!checkFMODError(result, "System::initialize")) {
-            studioSystem->release();
-            studioSystem = nullptr;
+        if (!checkFMODError(result, "FMOD::Studio::System::create")) {
+            env->ReleaseStringUTFChars(masterBankPathJava, masterBankPathCStr);
+            env->ReleaseStringUTFChars(stringsBankPathJava, stringsBankPathCStr);
             return;
         }
+        result = studioSystem->initialize(128, FMOD_STUDIO_INIT_NORMAL, FMOD_INIT_NORMAL, nullptr);
+        if (!checkFMODError(result, "studioSystem->initialize")) {
+            studioSystem->release();
+            studioSystem = nullptr;
+            env->ReleaseStringUTFChars(masterBankPathJava, masterBankPathCStr);
+            env->ReleaseStringUTFChars(stringsBankPathJava, stringsBankPathCStr);
+            return;
+        }
+        LOGI("nativeStartFMODPlayback: Studio System initialized.");
+    } else {
+        LOGI("nativeStartFMODPlayback: Studio System already exists.");
     }
 
-    // Stop and release existing event instance
     if (eventInstance) {
-        FMOD_STUDIO_PLAYBACK_STATE state;
-        eventInstance->getPlaybackState(&state);
-        if (state == FMOD_STUDIO_PLAYBACK_PLAYING) {
-            eventInstance->stop(FMOD_STUDIO_STOP_IMMEDIATE);
-        }
+        LOGI("nativeStartFMODPlayback: Releasing previous event instance.");
+        eventInstance->stop(FMOD_STUDIO_STOP_IMMEDIATE);
         eventInstance->release();
         eventInstance = nullptr;
     }
 
-    // Unload all previously loaded banks
     int bankCount = 0;
-    FMOD::Studio::Bank *loadedBanks[16];  // adjust size if needed
-    studioSystem->getBankList(loadedBanks, 16, &bankCount);
-    for (int i = 0; i < bankCount; ++i) {
-        loadedBanks[i]->unload();
+    FMOD::Studio::Bank *loadedBanks[32];
+    result = studioSystem->getBankList(loadedBanks, 32, &bankCount);
+    if (checkFMODError(result, "studioSystem->getBankList")) {
+        for (int i = 0; i < bankCount; ++i) {
+            loadedBanks[i]->unload();
+        }
+        if (bankCount > 0) LOGI("Unloaded %d existing bank(s).", bankCount);
     }
 
-    // Load master bank
-    FMOD::Studio::Bank *bank = nullptr;
-    result = studioSystem->loadBankFile(masterBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL, &bank);
-    if (!checkFMODError(result, "loadBankFile (Master)")) {
-        studioSystem->release();
-        studioSystem = nullptr;
+    FMOD::Studio::Bank *masterBank = nullptr;
+    result = studioSystem->loadBankFile(masterBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL, &masterBank);
+    if (!checkFMODError(result, "studioSystem->loadBankFile (Master)")) {
+        env->ReleaseStringUTFChars(masterBankPathJava, masterBankPathCStr);
+        env->ReleaseStringUTFChars(stringsBankPathJava, stringsBankPathCStr);
         return;
     }
+    LOGI("Master bank loaded: %s", masterBankPathCStr);
 
-    // Load optional strings bank
-    FMOD::Studio::Bank *stringsBank = nullptr;
-    result = studioSystem->loadBankFile(stringsBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL, &stringsBank);
+    FMOD::Studio::Bank *stringsBankLoaded = nullptr;
+    result = studioSystem->loadBankFile(stringsBankPathCStr, FMOD_STUDIO_LOAD_BANK_NORMAL, &stringsBankLoaded);
     if (result != FMOD_OK) {
-        LOGI("No strings bank loaded (optional)");
+        LOGI("No strings bank loaded (optional or error: %s)", FMOD_ErrorString(result));
+    } else {
+        LOGI("Strings bank loaded: %s", stringsBankPathCStr);
     }
 
-    // Load event
     FMOD::Studio::EventDescription *eventDescription = nullptr;
     result = studioSystem->getEvent("event:/Bike", &eventDescription);
-    if (!checkFMODError(result, "getEvent")) {
-        studioSystem->release();
-        studioSystem = nullptr;
+    if (!checkFMODError(result, "studioSystem->getEvent(\"event:/Bike\")")) {
+        env->ReleaseStringUTFChars(masterBankPathJava, masterBankPathCStr);
+        env->ReleaseStringUTFChars(stringsBankPathJava, stringsBankPathCStr);
         return;
     }
-
     result = eventDescription->createInstance(&eventInstance);
-    if (!checkFMODError(result, "createInstance")) {
-        studioSystem->release();
-        studioSystem = nullptr;
+    if (!checkFMODError(result, "eventDescription->createInstance for event:/Bike")) {
+        env->ReleaseStringUTFChars(masterBankPathJava, masterBankPathCStr);
+        env->ReleaseStringUTFChars(stringsBankPathJava, stringsBankPathCStr);
         return;
     }
+    LOGI("Instance created for event:/Bike");
 
-    if (!isRunning) {
-        isRunning = true;
-        if (updateThread) {
+    if (studioSystem && !isRunning.load(std::memory_order_relaxed)) {
+        if (updateThread != nullptr) {
+            LOGW("nativeStartFMODPlayback: Old updateThread object found while not running. Deleting.");
             delete updateThread;
+            updateThread = nullptr;
         }
+        isRunning.store(true, std::memory_order_relaxed);
         updateThread = new std::thread(fmodUpdateThread);
+        LOGI("FMOD update thread started by nativeStartFMODPlayback.");
+    } else if (studioSystem && isRunning.load(std::memory_order_relaxed) && updateThread == nullptr) {
+        LOGW("nativeStartFMODPlayback: isRunning was true, but updateThread was null. Recreating thread.");
+        updateThread = new std::thread(fmodUpdateThread);
+    } else if (studioSystem) {
+        LOGI("nativeStartFMODPlayback: FMOD update thread likely already running.");
     }
 
-    env->ReleaseStringUTFChars(masterBankPath, masterBankPathCStr);
-    env->ReleaseStringUTFChars(stringsBankPath, stringsBankPathCStr);
+    env->ReleaseStringUTFChars(masterBankPathJava, masterBankPathCStr);
+    env->ReleaseStringUTFChars(stringsBankPathJava, stringsBankPathCStr);
+    LOGI("nativeStartFMODPlayback: Finished.");
 }
 
-
-
 JNIEXPORT void JNICALL
-Java_com_app_musicbike_ui_activities_MainActivity_setFMODParameter(JNIEnv *env, jobject obj, jstring paramName, jfloat value) {
-    const char *paramNameCStr = env->GetStringUTFChars(paramName, 0);
+Java_com_app_musicbike_services_MusicService_nativeSetFMODParameter(
+        JNIEnv *env,
+        jobject thiz,
+        jstring paramNameJava,
+        jfloat value) {
+    const char *paramNameCStr = env->GetStringUTFChars(paramNameJava, 0);
+    std::string paramNameStdStr = paramNameCStr;
 
     std::lock_guard<std::mutex> lock(fmodMutex);
-    if (studioSystem) { // NOTE: use studioSystem, not eventInstance
-        FMOD_RESULT result = studioSystem->setParameterByName(paramNameCStr, value);
-        if (result != FMOD_OK) {
-            LOGE("Failed to set FMOD parameter '%s': %s", paramNameCStr, FMOD_ErrorString(result));
-        } else {
-            LOGI("FMOD global parameter '%s' set to %f", paramNameCStr, value);
-        }
-    } else {
-        LOGE("No studio system to set parameter on");
-    }
+    FMOD_RESULT result;
 
-    env->ReleaseStringUTFChars(paramName, paramNameCStr);
-}
-
-JNIEXPORT void JNICALL
-Java_com_app_musicbike_ui_activities_MainActivity_toggleFMODPlayback(JNIEnv *, jobject) {
-    bool isPlaying = false;
-    FMOD_STUDIO_PLAYBACK_STATE state;
-    if (eventInstance && eventInstance->getPlaybackState(&state) == FMOD_OK) {
-        isPlaying = (state == FMOD_STUDIO_PLAYBACK_PLAYING);
-    }
-
-    if (!isPlaying) {
-        eventInstance->start(); // cold start if it hasn't played yet
-    } else {
-        bool isPaused = false;
+    // Handle event-specific parameters first
+    if (paramNameStdStr == "Hall Direction" || paramNameStdStr == "Event") {
         if (eventInstance) {
-            eventInstance->getPaused(&isPaused);
-            eventInstance->setPaused(!isPaused);
-        }
-
-        // ✅ Pause/resume the entire master bus
-        FMOD::Studio::Bus* masterBus = nullptr;
-        if (studioSystem->getBus("bus:/", &masterBus) == FMOD_OK && masterBus) {
-            masterBus->setPaused(!isPaused);
-            LOGI("Master bus paused state set to %d", !isPaused);
+            result = eventInstance->setParameterByName(paramNameCStr, value);
+            if (checkFMODError(result, ("eventInstance->setParameterByName for " + paramNameStdStr).c_str())) {
+                LOGI("FMOD event parameter '%s' set to %f", paramNameCStr, value);
+            }
+        } else {
+            LOGE("Cannot set event parameter '%s': eventInstance is null.", paramNameCStr);
         }
     }
+        // Handle global parameters (like Wheel Speed, Pitch, if they are indeed global)
+        // You might need to list your known global parameters here
+    else if (paramNameStdStr == "Wheel Speed" || paramNameStdStr == "Pitch") {
+        if (studioSystem) {
+            result = studioSystem->setParameterByName(paramNameCStr, value);
+            if (checkFMODError(result, ("studioSystem->setParameterByName for " + paramNameStdStr).c_str())) {
+                LOGI("FMOD global parameter '%s' set to %f", paramNameCStr, value);
+            }
+        } else {
+            LOGE("Cannot set global parameter '%s': FMOD Studio System is null.", paramNameCStr);
+        }
+    } else {
+        LOGW("Unknown FMOD parameter name: %s. Not set.", paramNameCStr);
+    }
+    env->ReleaseStringUTFChars(paramNameJava, paramNameCStr);
 }
 
-
 JNIEXPORT void JNICALL
-Java_com_app_musicbike_ui_activities_MainActivity_playFMODEvent(JNIEnv *, jobject) {
+Java_com_app_musicbike_services_MusicService_nativeToggleFMODPlayback(
+        JNIEnv *env,
+        jobject thiz) {
     std::lock_guard<std::mutex> lock(fmodMutex);
+    LOGI("NATIVE nativeToggleFMODPlayback: Entered.");
 
-    if (!eventInstance) {
-        LOGE("Cannot play event: eventInstance is null.");
+    if (!studioSystem || !eventInstance) {
+        LOGE("NATIVE nativeToggleFMODPlayback: Cannot toggle playback: FMOD system or event instance is null.");
         return;
     }
 
-    FMOD_RESULT result = eventInstance->start();
-    if (result != FMOD_OK) {
-        LOGE("Failed to start FMOD event: %s", FMOD_ErrorString(result));
-    } else {
-        LOGI("FMOD event started (play).");
+    bool isCurrentlyPaused = false;
+    FMOD_RESULT result = eventInstance->getPaused(&isCurrentlyPaused);
+    if (!checkFMODError(result, "NATIVE nativeToggleFMODPlayback: eventInstance->getPaused")) {
+        LOGE("NATIVE nativeToggleFMODPlayback: Failed to get paused state, cannot toggle.");
+        return;
     }
+    LOGI("NATIVE nativeToggleFMODPlayback: Current event isPaused state (from getPaused()): %s", isCurrentlyPaused ? "true" : "false");
+
+    FMOD_STUDIO_PLAYBACK_STATE currentPlaybackState;
+    result = eventInstance->getPlaybackState(&currentPlaybackState);
+    if (!checkFMODError(result, "NATIVE nativeToggleFMODPlayback: eventInstance->getPlaybackState")) {
+        LOGE("NATIVE nativeToggleFMODPlayback: Failed to get playback state, cannot toggle reliably.");
+        return;
+    }
+    LOGI("NATIVE nativeToggleFMODPlayback: Current event playback state (from getPlaybackState()): %d", currentPlaybackState);
+
+    if (currentPlaybackState == FMOD_STUDIO_PLAYBACK_STOPPED || currentPlaybackState == FMOD_STUDIO_PLAYBACK_STOPPING) {
+        LOGI("NATIVE nativeToggleFMODPlayback: Event was STOPPED/STOPPING. Attempting to start.");
+        result = eventInstance->start();
+        if(checkFMODError(result, "NATIVE nativeToggleFMODPlayback: eventInstance->start (from stopped state)")) {
+            LOGI("NATIVE nativeToggleFMODPlayback: eventInstance->start() successful.");
+        } else {
+            LOGE("NATIVE nativeToggleFMODPlayback: eventInstance->start() FAILED.");
+        }
+    } else { // Event is PLAYING, PAUSED, STARTING, or SUSTAINING
+        LOGI("NATIVE nativeToggleFMODPlayback: Event is not stopped. Will attempt to setPaused(%s).", !isCurrentlyPaused ? "true (pause)" : "false (unpause)");
+        result = eventInstance->setPaused(!isCurrentlyPaused); // Toggle the current paused state
+        if(checkFMODError(result, "NATIVE nativeToggleFMODPlayback: eventInstance->setPaused")) {
+            LOGI("NATIVE nativeToggleFMODPlayback: eventInstance->setPaused(!%s) successful.", isCurrentlyPaused ? "true" : "false");
+        } else {
+            LOGE("NATIVE nativeToggleFMODPlayback: eventInstance->setPaused(!%s) FAILED.", isCurrentlyPaused ? "true" : "false");
+        }
+    }
+    LOGI("NATIVE nativeToggleFMODPlayback: Exiting.");
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_app_musicbike_ui_activities_MainActivity_isFMODPaused(JNIEnv *, jobject) {
+JNIEXPORT void JNICALL
+Java_com_app_musicbike_services_MusicService_nativePlayFMODEvent(
+        JNIEnv *env,
+        jobject thiz) {
     std::lock_guard<std::mutex> lock(fmodMutex);
-
     if (!eventInstance) {
-        LOGE("isFMODPaused: eventInstance is null.");
-        return JNI_TRUE; // Assume paused if unknown
+        LOGE("nativePlayFMODEvent: Cannot play event: eventInstance for 'event:/Bike' is null.");
+        return;
     }
-
-    bool isPaused = true;
-    FMOD_RESULT result = eventInstance->getPaused(&isPaused);
-    if (result != FMOD_OK) {
-        LOGE("getPaused failed: %s", FMOD_ErrorString(result));
-        return JNI_TRUE; // Assume paused on error
+    LOGI("nativePlayFMODEvent: Attempting to start 'event:/Bike'");
+    FMOD_RESULT result = eventInstance->start();
+    if(checkFMODError(result, "nativePlayFMODEvent: eventInstance->start")) {
+        LOGI("nativePlayFMODEvent: 'event:/Bike' start command issued.");
     }
-
-    return isPaused ? JNI_TRUE : JNI_FALSE;
 }
 
+// Corrected nativeIsFMODPaused
+JNIEXPORT jboolean JNICALL
+Java_com_app_musicbike_services_MusicService_nativeIsFMODPaused(
+        JNIEnv *env,
+        jobject thiz) {
+    std::lock_guard<std::mutex> lock(fmodMutex);
+    if (!eventInstance) {
+        LOGW("nativeIsFMODPaused: eventInstance is null. Returning true (assumed paused).");
+        return JNI_TRUE;
+    }
+
+    bool isPausedQuery = true; // Default to true (paused)
+    FMOD_RESULT result = eventInstance->getPaused(&isPausedQuery);
+
+    if (!checkFMODError(result, "nativeIsFMODPaused: eventInstance->getPaused()")) {
+        // If getting paused state fails, assume it's paused to be safe or prevent unexpected play.
+        return JNI_TRUE;
+    }
+    // LOGI("nativeIsFMODPaused: eventInstance->getPaused() returned: %s", isPausedQuery ? "true" : "false");
+    return isPausedQuery ? JNI_TRUE : JNI_FALSE;
 }
+
+JNIEXPORT void JNICALL
+Java_com_app_musicbike_services_MusicService_nativeStopFMODUpdateThread(
+        JNIEnv *env,
+        jobject thiz) {
+    LOGI("nativeStopFMODUpdateThread: Called.");
+    if (isRunning.load(std::memory_order_relaxed)) {
+        isRunning.store(false, std::memory_order_relaxed);
+        if (updateThread != nullptr) {
+            if (updateThread->joinable()) {
+                LOGI("nativeStopFMODUpdateThread: Joining FMOD update thread...");
+                updateThread->join();
+                LOGI("nativeStopFMODUpdateThread: FMOD update thread joined.");
+            } else {
+                LOGW("nativeStopFMODUpdateThread: Update thread existed but was not joinable.");
+            }
+            delete updateThread;
+            updateThread = nullptr;
+            LOGI("nativeStopFMODUpdateThread: Custom FMOD update thread object deleted.");
+        } else {
+            LOGW("nativeStopFMODUpdateThread: isRunning was true, but updateThread object was null.");
+        }
+    } else {
+        if (updateThread != nullptr) {
+            LOGW("nativeStopFMODUpdateThread: isRunning was false, but updateThread object existed. Deleting.");
+            if (updateThread->joinable()) { // Should not be joinable if not running, but just in case
+                updateThread->join();
+            }
+            delete updateThread;
+            updateThread = nullptr;
+        }
+        LOGI("nativeStopFMODUpdateThread: Custom FMOD update thread was not running or already signaled to stop.");
+    }
+}
+
+} // extern "C"

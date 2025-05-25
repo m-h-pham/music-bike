@@ -110,7 +110,7 @@ class SensorsFragment : Fragment() {
         }
 
         // Try to hook up BLE
-        if ((activity as? MainActivity)?.isServiceConnected == true) {
+        if ((activity as? MainActivity)?.isBleServiceConnected == true) {
             onServiceReady()
         } else {
             binding.txtSensorData.text = "Waiting for connection..."
@@ -409,7 +409,7 @@ class SensorsFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         // Re-check service connection if it might have established while fragment was paused
-        if (bleService == null && (activity as? MainActivity)?.isServiceConnected == true) {
+        if (bleService == null && (activity as? MainActivity)?.isBleServiceConnected == true) {
             onServiceReady()
         } else {
             // Update display with current values if service was already connected
