@@ -119,7 +119,7 @@ class MusicFragment : Fragment() {
             musicViewModel.togglePlayback()
         }
 
-        // Bank Selector (no changes to this part of setupUI)
+        // Bank Selector
         val bankSpinner = binding.bankSelector
         val allBanks = requireContext().assets.list("")?.filter {
             it.endsWith(".bank") && !it.endsWith("strings.bank")
@@ -140,112 +140,115 @@ class MusicFragment : Fragment() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
+        // Wheel Speed
         setupSeekBar(binding.wheelSpeedSeekBar, binding.wheelSpeedLabel, "Wheel Speed", 25, 0, 0) { value ->
-            if (!isWheelSpeedAutoUi) {
+            if (musicViewModel.isWheelSpeedAuto.value != true) {
                 musicViewModel.setFmodParameter("Wheel Speed", value)
             }
         }
-        binding.wheelSpeedModeSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
+        binding.wheelSpeedModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked && !isBleConnected()) {
-                buttonView.isChecked = false
-                binding.wheelSpeedSeekBar.isEnabled = true
+                binding.wheelSpeedModeSwitch.isChecked = false
                 showToast("BLE not connected. Auto mode cancelled.")
                 return@setOnCheckedChangeListener
             }
-            isWheelSpeedAutoUi = isChecked
-            binding.wheelSpeedSeekBar.isEnabled = !isChecked
             musicViewModel.setWheelSpeedAuto(isChecked)
         }
 
+        // Pitch
         setupSeekBar(binding.pitchSeekBar, binding.pitchLabel, "Pitch", 90, -45, 45) { value ->
-            if (musicViewModel.isPitchAuto.value != true) { // Check ViewModel state
+            if (musicViewModel.isPitchAuto.value != true) {
                 musicViewModel.setFmodParameter("Pitch", value)
             }
         }
         binding.pitchModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked && !isBleConnected()) {
-                binding.pitchModeSwitch.isChecked = false // Revert
-                // binding.pitchSeekBar.isEnabled = true // Will be handled by observer
-                // binding.pitchReverseSwitch.isEnabled = false // Will be handled by observer
+                binding.pitchModeSwitch.isChecked = false
                 showToast("BLE not connected. Auto mode cancelled.")
                 return@setOnCheckedChangeListener
             }
             musicViewModel.setPitchAuto(isChecked)
         }
-
-        binding.pitchReverseSwitch.setOnCheckedChangeListener { _, isChecked ->
-            musicViewModel.togglePitchSignalReversal() // ViewModel handles the logic and persistence
-            Log.d(TAG, "Pitch Reverse Switch UI toggled to: $isChecked")
+        binding.pitchReverseSwitch.setOnCheckedChangeListener { _, isChecked -> // isChecked here is the new state of the switch
+            // We call toggle which will invert the current ViewModel state.
+            // The actual checked state of the switch will be set by observing the LiveData.
+            musicViewModel.togglePitchSignalReversal()
+            Log.d(TAG, "Pitch Reverse Switch UI toggled by user. New desired state (from isChecked): $isChecked")
         }
-
+        // Set initial enabled state for pitchReverseSwitch based on current "Auto Pitch" mode state
         binding.pitchReverseSwitch.isEnabled = musicViewModel.isPitchAuto.value ?: false
 
+
+        // Event
         val events = arrayOf("None", "Jump", "Drop")
         val eventAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, events)
         binding.eventSpinner.adapter = eventAdapter
         binding.eventSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                if (!isEventAutoUi) {
+                if (musicViewModel.isEventAuto.value != true) {
                     musicViewModel.setFmodParameter("Event", position.toFloat())
-                    if (position in 1..2) {
-                        handler.postDelayed({
-                            binding.eventSpinner.setSelection(0)
-                            // musicViewModel.setFmodParameter("Event", 0f) // Service handles auto-reset if needed
-                        }, 1000)
+                    if (position in 1..2) { // Jump or Drop
+                        // The service now handles auto-resetting the "Event" parameter if needed.
+                        // No need for handler here if service does it.
                     }
                 }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        binding.eventModeSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
+        binding.eventModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked && !isBleConnected()) {
-                buttonView.isChecked = false
-                binding.eventSpinner.isEnabled = true
+                binding.eventModeSwitch.isChecked = false
                 showToast("BLE not connected. Auto mode cancelled.")
                 return@setOnCheckedChangeListener
             }
-            isEventAutoUi = isChecked
-            binding.eventSpinner.isEnabled = !isChecked
             musicViewModel.setEventAuto(isChecked)
         }
 
+        // Hall Direction
         val hallDirectionOptions = arrayOf("Forward", "Reverse")
         val hallAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, hallDirectionOptions)
         binding.hallDirectionSpinner.adapter = hallAdapter
-        binding.hallDirectionSpinner.setSelection(0) // Default Forward (UI)
-        // musicViewModel.setFmodParameter("Hall Direction", 1f) // ViewModel/Service handles initial state
+        // Initial selection will be handled by observing ViewModel
 
         binding.hallDirectionSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                if (!isHallDirectionAutoUi) {
-                    val value = if (position == 0) 1f else 0f
+                if (musicViewModel.isHallDirectionAuto.value != true) {
+                    val value = if (position == 0) 1f else 0f // UI "Forward" (pos 0) = FMOD 1f
                     musicViewModel.setFmodParameter("Hall Direction", value)
                 }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        binding.hallDirectionModeSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
+        binding.hallDirectionModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked && !isBleConnected()) {
-                buttonView.isChecked = false
-                binding.hallDirectionSpinner.isEnabled = true
+                binding.hallDirectionModeSwitch.isChecked = false
                 showToast("BLE not connected. Auto mode cancelled.")
                 return@setOnCheckedChangeListener
             }
-            isHallDirectionAutoUi = isChecked
-            binding.hallDirectionSpinner.isEnabled = !isChecked
             musicViewModel.setHallDirectionAuto(isChecked)
         }
 
+        // Auto All Switch
         binding.autoAllSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked && !isBleConnected()) {
                 showToast("BLE not connected. Auto All cancelled.")
-                handler.postDelayed({ binding.autoAllSwitch.isChecked = false }, 100)
+                handler.postDelayed({
+                    if(!isBleConnected()) binding.autoAllSwitch.isChecked = false
+                }, 100)
                 return@setOnCheckedChangeListener
             }
-            binding.wheelSpeedModeSwitch.isChecked = isChecked
-            binding.pitchModeSwitch.isChecked = isChecked
-            binding.eventModeSwitch.isChecked = isChecked
-            binding.hallDirectionModeSwitch.isChecked = isChecked
+            musicViewModel.setWheelSpeedAuto(isChecked)
+            musicViewModel.setPitchAuto(isChecked)
+            musicViewModel.setEventAuto(isChecked)
+            musicViewModel.setHallDirectionAuto(isChecked)
+        }
+
+        // Reset Stats Button Listener
+        binding.resetStatsButton.setOnClickListener {
+            Log.d(TAG, "Reset Stats button clicked.")
+            musicViewModel.resetStats()
+            // Optionally show a Toast or confirmation
+            showToast("Ride stats have been reset.")
         }
     }
 
@@ -259,28 +262,30 @@ class MusicFragment : Fragment() {
 
         musicViewModel.currentBankName.observe(viewLifecycleOwner) { bankName ->
             Log.d(TAG, "Observed currentBankName: $bankName")
-            // Find the position of bankName in your bankNames list and set spinner
-            val bankNames = (binding.bankSelector.adapter as ArrayAdapter<String>)
-            val position = (0 until bankNames.count).firstOrNull { bankNames.getItem(it) == bankName }
-            if (position != null && binding.bankSelector.selectedItemPosition != position) {
-                binding.bankSelector.setSelection(position)
+            val bankNamesAdapter = (binding.bankSelector.adapter as? ArrayAdapter<String>)
+            bankNamesAdapter?.let { adapter ->
+                val position = (0 until adapter.count).firstOrNull { adapter.getItem(it) == bankName }
+                if (position != null && binding.bankSelector.selectedItemPosition != position) {
+                    binding.bankSelector.setSelection(position)
+                }
             }
         }
 
         musicViewModel.wheelSpeedDisplay.observe(viewLifecycleOwner) { speed ->
-            // Only update UI from this if in auto mode, otherwise manual input takes precedence for display
+            binding.wheelSpeedLabel.text = "Wheel Speed: ${speed.toInt()}" // Always update label
             if (musicViewModel.isWheelSpeedAuto.value == true) {
-                binding.wheelSpeedSeekBar.progress = speed.coerceIn(0f, 25f).toInt() // Max is 25 for this seekbar
-                binding.wheelSpeedLabel.text = "Wheel Speed: ${speed.toInt()}"
+                binding.wheelSpeedSeekBar.progress = speed.coerceIn(0f, 25f).toInt()
             }
         }
         musicViewModel.pitchDisplay.observe(viewLifecycleOwner) { pitch ->
+            binding.pitchLabel.text = "Pitch: ${pitch.toInt()}" // Always update label
             if (musicViewModel.isPitchAuto.value == true) {
                 binding.pitchSeekBar.progress = (pitch.coerceIn(-45f, 45f) + 45).toInt()
-                binding.pitchLabel.text = "Pitch: ${pitch.toInt()}"
             }
         }
         musicViewModel.eventDisplayValue.observe(viewLifecycleOwner) { eventParam ->
+            // Update UI for event if needed, e.g., if you have a text display for last auto-triggered event
+            // For the spinner, it's mostly for manual selection or reflecting auto-selection
             if (musicViewModel.isEventAuto.value == true) {
                 val selection = when(eventParam.toInt()) {
                     1 -> 1 // Jump
@@ -293,16 +298,16 @@ class MusicFragment : Fragment() {
             }
         }
         musicViewModel.hallDirectionDisplayValue.observe(viewLifecycleOwner) { directionParam ->
+            // Update UI for hall direction if needed
             if (musicViewModel.isHallDirectionAuto.value == true) {
-                // Assuming FMOD 1f = "Forward" (position 0 in spinner), 0f = "Reverse" (position 1)
-                val selection = if (directionParam == 1f) 0 else 1
+                val selection = if (directionParam == 1f) 0 else 1 // UI "Forward" (pos 0) = FMOD 1f
                 if (binding.hallDirectionSpinner.selectedItemPosition != selection) {
                     binding.hallDirectionSpinner.setSelection(selection)
                 }
             }
         }
 
-        // Observers for auto mode states (to update switches and UI element enabled states)
+        // Observers for auto mode states
         musicViewModel.isWheelSpeedAuto.observe(viewLifecycleOwner) { isAuto ->
             if (binding.wheelSpeedModeSwitch.isChecked != isAuto) binding.wheelSpeedModeSwitch.isChecked = isAuto
             binding.wheelSpeedSeekBar.isEnabled = !isAuto
@@ -310,7 +315,7 @@ class MusicFragment : Fragment() {
         musicViewModel.isPitchAuto.observe(viewLifecycleOwner) { isAuto ->
             if (binding.pitchModeSwitch.isChecked != isAuto) binding.pitchModeSwitch.isChecked = isAuto
             binding.pitchSeekBar.isEnabled = !isAuto
-            binding.pitchReverseSwitch.isEnabled = isAuto // Enable reverse only if pitch auto is on
+            binding.pitchReverseSwitch.isEnabled = isAuto
         }
         musicViewModel.isEventAuto.observe(viewLifecycleOwner) { isAuto ->
             if (binding.eventModeSwitch.isChecked != isAuto) binding.eventModeSwitch.isChecked = isAuto
@@ -320,11 +325,30 @@ class MusicFragment : Fragment() {
             if (binding.hallDirectionModeSwitch.isChecked != isAuto) binding.hallDirectionModeSwitch.isChecked = isAuto
             binding.hallDirectionSpinner.isEnabled = !isAuto
         }
+
+        // Observer for Pitch Reversal Switch State
         musicViewModel.isPitchSignalReversed.observe(viewLifecycleOwner) { isReversed ->
             if (binding.pitchReverseSwitch.isChecked != isReversed) {
                 binding.pitchReverseSwitch.isChecked = isReversed
             }
             Log.d(TAG, "Observed pitchReversalEnabled from ViewModel: $isReversed, UI Switch updated.")
+        }
+
+        // Observers for Stats LiveData
+        musicViewModel.maxSpeed.observe(viewLifecycleOwner) { maxSpeed ->
+            binding.maxSpeedStatText.text = String.format(Locale.US, "Max Speed: %.1f km/h", maxSpeed)
+        }
+        musicViewModel.maxPositivePitch.observe(viewLifecycleOwner) { maxPitchUp ->
+            binding.maxPositivePitchStatText.text = String.format(Locale.US, "Max Pitch (Up): %.1f°", maxPitchUp)
+        }
+        musicViewModel.minNegativePitch.observe(viewLifecycleOwner) { maxPitchDown -> // Value is positive
+            binding.minNegativePitchStatText.text = String.format(Locale.US, "Max Pitch (Down): -%.1f°", maxPitchDown)
+        }
+        musicViewModel.jumpCount.observe(viewLifecycleOwner) { count ->
+            binding.jumpCountStatText.text = "Jumps: $count"
+        }
+        musicViewModel.dropCount.observe(viewLifecycleOwner) { count ->
+            binding.dropCountStatText.text = "Drops: $count"
         }
     }
 

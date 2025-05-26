@@ -1,16 +1,21 @@
 package com.app.musicbike.ui.viewmodels
 
+import android.app.Application // Import Application for AndroidViewModel
+import android.content.Context // Import Context for SharedPreferences
 import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModel
+//import androidx.lifecycle.ViewModel
 import com.app.musicbike.services.MusicService
 
-class MusicViewModel : ViewModel() {
+// Change ViewModel to AndroidViewModel to easily access SharedPreferences via applicationContext
+class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val TAG = "MusicViewModel"
+    private val prefs = application.getSharedPreferences("MusicBikeRideStats", Context.MODE_PRIVATE)
 
     private var musicService: MusicService? = null
 
@@ -34,32 +39,59 @@ class MusicViewModel : ViewModel() {
     private val _hallDirectionDisplayValue = MutableLiveData<Float>(1f)
     val hallDirectionDisplayValue: LiveData<Float> get() = _hallDirectionDisplayValue
 
+    // ---LiveData for Ride Stats ---
+    private val _maxSpeed = MutableLiveData<Float>(0f)
+    val maxSpeed: LiveData<Float> get() = _maxSpeed
+
+    private val _maxPositivePitch = MutableLiveData<Float>(0f)
+    val maxPositivePitch: LiveData<Float> get() = _maxPositivePitch
+
+    private val _minNegativePitch = MutableLiveData<Float>(0f) // Stores as positive, display as negative
+    val minNegativePitch: LiveData<Float> get() = _minNegativePitch
+
+    private val _jumpCount = MutableLiveData<Int>(0)
+    val jumpCount: LiveData<Int> get() = _jumpCount
+
+    private val _dropCount = MutableLiveData<Int>(0)
+    val dropCount: LiveData<Int> get() = _dropCount
+    // --- END stats---
+
     // Observers for MusicService LiveData
     private var serviceLifecycleOwner: LifecycleOwner? = null
-    private val fmodSpeedObserver = Observer<Float> { speed -> _wheelSpeedDisplay.postValue(speed) }
-    private val fmodPitchObserver = Observer<Float> { pitch -> _pitchDisplay.postValue(pitch) }
-    private val fmodEventObserver = Observer<Float> { eventParam -> _eventDisplayValue.postValue(eventParam) }
-    private val fmodHallDirObserver = Observer<Float> { directionParam -> _hallDirectionDisplayValue.postValue(directionParam) }
+    private val fmodSpeedObserver = Observer<Float> { speed ->
+        _wheelSpeedDisplay.postValue(speed)
+        updateMaxSpeedStat(speed) // ADDED: Update stat
+    }
+    private val fmodPitchObserver = Observer<Float> { pitch ->
+        _pitchDisplay.postValue(pitch)
+        updatePitchStats(pitch) // ADDED: Update stat
+    }
+    private val fmodEventObserver = Observer<Float> { eventParam -> // eventParam from MusicService is 0, 1, or 2
+        _eventDisplayValue.postValue(eventParam)
+        updateEventCounts(eventParam) // ADDED: Update stat
+    }
+    private val fmodHallDirObserver = Observer<Float> { /* Not directly used for these stats yet */ }
 
+
+    init {
+        loadStats() // Load stats when ViewModel is created
+    }
 
     fun setMusicService(service: MusicService?, owner: LifecycleOwner) {
-        // ADD/MODIFY LOGS HERE
-        Log.d(TAG, "ViewModel setMusicService called. Incoming service is ${if (service == null) "NULL" else "NOT NULL"}.")
-
-        removeServiceObservers() // Remove from old instance if any
-
+        removeServiceObservers()
         this.musicService = service
-        this.serviceLifecycleOwner = owner // Store owner to manage observers correctly
+        this.serviceLifecycleOwner = owner
 
         if (this.musicService != null) {
-            _isPlaying.postValue(this.musicService!!.isPlaying()) // Initial state
+            _isPlaying.postValue(this.musicService!!.isPlaying())
+
             this.musicService!!.currentFmodSpeed.observe(owner, fmodSpeedObserver)
             this.musicService!!.currentFmodPitch.observe(owner, fmodPitchObserver)
             this.musicService!!.currentFmodEventParameter.observe(owner, fmodEventObserver)
             this.musicService!!.currentFmodHallDirection.observe(owner, fmodHallDirObserver)
-            Log.d(TAG, "MusicService instance set in ViewModel and observers attached.")
+            Log.d(TAG, "MusicService instance set and observers attached.")
         } else {
-            Log.w(TAG, "MusicService instance is NULL after trying to set it in ViewModel.")
+            Log.w(TAG, "MusicService instance is null in ViewModel.")
         }
     }
 
@@ -126,29 +158,32 @@ class MusicViewModel : ViewModel() {
     fun setWheelSpeedAuto(isAuto: Boolean) {
         _isWheelSpeedAuto.postValue(isAuto)
         musicService?.setAutoSpeedMode(isAuto)
+        saveBooleanPreference("isWheelSpeedAuto", isAuto)
         Log.d(TAG, "setWheelSpeedAuto: $isAuto")
     }
     fun setPitchAuto(isAuto: Boolean) {
         _isPitchAuto.postValue(isAuto)
         musicService?.setAutoPitchMode(isAuto)
+        saveBooleanPreference("isPitchAuto", isAuto)
         Log.d(TAG, "setPitchAuto: $isAuto")
     }
     fun setEventAuto(isAuto: Boolean) {
         _isEventAuto.postValue(isAuto)
         musicService?.setAutoEventMode(isAuto)
+        saveBooleanPreference("isEventAuto", isAuto)
         Log.d(TAG, "setEventAuto: $isAuto")
     }
     fun setHallDirectionAuto(isAuto: Boolean) {
         _isHallDirectionAuto.postValue(isAuto)
         musicService?.setAutoHallDirectionMode(isAuto)
+        saveBooleanPreference("isHallDirectionAuto", isAuto)
         Log.d(TAG, "setHallDirectionAuto: $isAuto")
     }
     fun togglePitchSignalReversal() {
-        val currentReversalState = _isPitchSignalReversed.value ?: false
-        val newState = !currentReversalState
+        val newState = !(_isPitchSignalReversed.value ?: false)
         _isPitchSignalReversed.postValue(newState)
-        musicService?.setPitchSignalReversal(newState) // Inform MusicService
-        savePitchSignalReversalPreference(newState)    // Save to SharedPreferences
+        musicService?.setPitchSignalReversal(newState)
+        saveBooleanPreference("isPitchSignalReversed", newState)
         Log.d(TAG, "Pitch signal reversal toggled to: $newState")
     }
 
@@ -168,6 +203,75 @@ class MusicViewModel : ViewModel() {
         Log.d(TAG, "Pitch reversal preference loaded (Implement SharedPreferences)")
         return false // Default placeholder
     }
+
+    // --- Stat Update and Persistence Logic ---
+    private fun updateMaxSpeedStat(currentSpeed: Float) {
+        if (currentSpeed > (_maxSpeed.value ?: 0f)) {
+            _maxSpeed.postValue(currentSpeed)
+            prefs.edit().putFloat("maxSpeed", currentSpeed).apply()
+        }
+    }
+
+    private fun updatePitchStats(currentPitch: Float) {
+        if (currentPitch > 0 && currentPitch > (_maxPositivePitch.value ?: 0f)) {
+            _maxPositivePitch.postValue(currentPitch)
+            prefs.edit().putFloat("maxPositivePitch", currentPitch).apply()
+        } else if (currentPitch < 0 && currentPitch < -(_minNegativePitch.value ?: 0f) ) { // store as positive
+            _minNegativePitch.postValue(-currentPitch) // store absolute value
+            prefs.edit().putFloat("minNegativePitch", -currentPitch).apply()
+        }
+    }
+
+    private fun updateEventCounts(eventParam: Float) { // Assuming 1.0f for Jump, 2.0f for Drop
+        when (eventParam.toInt()) {
+            1 -> { // Jump
+                val newCount = (_jumpCount.value ?: 0) + 1
+                _jumpCount.postValue(newCount)
+                prefs.edit().putInt("jumpCount", newCount).apply()
+            }
+            2 -> { // Drop
+                val newCount = (_dropCount.value ?: 0) + 1
+                _dropCount.postValue(newCount)
+                prefs.edit().putInt("dropCount", newCount).apply()
+            }
+        }
+    }
+
+    fun resetStats() {
+        _maxSpeed.postValue(0f)
+        _maxPositivePitch.postValue(0f)
+        _minNegativePitch.postValue(0f)
+        _jumpCount.postValue(0)
+        _dropCount.postValue(0)
+
+        prefs.edit()
+            .putFloat("maxSpeed", 0f)
+            .putFloat("maxPositivePitch", 0f)
+            .putFloat("minNegativePitch", 0f)
+            .putInt("jumpCount", 0)
+            .putInt("dropCount", 0)
+            .apply()
+        Log.i(TAG, "Ride stats reset.")
+    }
+
+    private fun loadStats() {
+        _maxSpeed.value = prefs.getFloat("maxSpeed", 0f)
+        _maxPositivePitch.value = prefs.getFloat("maxPositivePitch", 0f)
+        _minNegativePitch.value = prefs.getFloat("minNegativePitch", 0f)
+        _jumpCount.value = prefs.getInt("jumpCount", 0)
+        _dropCount.value = prefs.getInt("dropCount", 0)
+        Log.i(TAG, "Ride stats loaded from SharedPreferences.")
+    }
+
+    // Helper for boolean preferences (used for auto modes and pitch reversal)
+    private fun saveBooleanPreference(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    private fun loadBooleanPreference(key: String, defaultValue: Boolean): Boolean {
+        return prefs.getBoolean(key, defaultValue)
+    }
+
 
     override fun onCleared() {
         super.onCleared()
