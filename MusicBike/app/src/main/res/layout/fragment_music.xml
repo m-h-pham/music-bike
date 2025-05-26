@@ -6,7 +6,6 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
-    <!-- Playback Toggle -->
     <Button
         android:id="@+id/toggleButton"
         android:layout_width="match_parent"
@@ -15,9 +14,9 @@
         android:layout_marginTop="16dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        android:contentDescription="Toggles music playback (Play/Pause)" />
 
-    <!-- Bank Selector -->
     <TextView
         android:id="@+id/bankSelectorLabel"
         android:layout_width="wrap_content"
@@ -34,108 +33,110 @@
         android:layout_marginTop="4dp"
         app:layout_constraintTop_toBottomOf="@id/bankSelectorLabel"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        android:contentDescription="Dropdown to select FMOD sound bank" />
 
-    <!-- Auto All Switch -->
-
-    <!-- WHEEL SPEED -->
-
-    <Switch
+    <com.google.android.material.switchmaterial.SwitchMaterial
         android:id="@+id/autoAllSwitch"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="104dp"
-        android:text="Auto All"
+        android:layout_marginTop="16dp"
+        android:text="Auto All Parameters"
+        app:layout_constraintTop_toBottomOf="@id/bankSelector"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/toggleButton" />
+        android:contentDescription="Toggles automatic sensor-driven mode for all parameters" />
 
-    <TextView
-        android:id="@+id/wheelSpeedLabel"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:id="@+id/wheelSpeedControlsLayout"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Wheel Speed: 0"
-        android:layout_marginTop="32dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="16dp"
         app:layout_constraintTop_toBottomOf="@id/autoAllSwitch"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
-    <ImageView
-        android:id="@+id/wheelSpeedStatusIcon"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:layout_marginEnd="8dp"
-        android:contentDescription="Wheel Speed Status"
-        android:src="@drawable/ic_status_off"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/wheelSpeedLabel"
-        app:layout_constraintEnd_toStartOf="@id/wheelSpeedModeSwitch" />
+        <TextView
+            android:id="@+id/wheelSpeedLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Wheel Speed: 0"/>
 
-    <Switch
-        android:id="@+id/wheelSpeedModeSwitch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Auto"
-        app:layout_constraintTop_toTopOf="@id/wheelSpeedLabel"
-        app:layout_constraintEnd_toEndOf="parent" />
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/wheelSpeedModeSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Auto"
+            android:contentDescription="Toggle automatic control for wheel speed"/>
+    </LinearLayout>
 
-    <!-- PITCH -->
     <SeekBar
         android:id="@+id/wheelSpeedSeekBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:max="100"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="1.0"
+        android:layout_marginTop="8dp"
+        android:max="25"
+        android:progress="0"
+        app:layout_constraintTop_toBottomOf="@id/wheelSpeedControlsLayout"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/wheelSpeedLabel" />
+        app:layout_constraintEnd_toEndOf="parent"
+        android:contentDescription="Manually adjust wheel speed parameter"/>
 
-    <TextView
-        android:id="@+id/pitchLabel"
-        android:layout_width="wrap_content"
+
+    <LinearLayout
+        android:id="@+id/pitchControlsLayout"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Pitch: 0"
-        android:layout_marginTop="32dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="16dp"
         app:layout_constraintTop_toBottomOf="@id/wheelSpeedSeekBar"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
-    <ImageView
-        android:id="@+id/pitchStatusIcon"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:layout_marginEnd="8dp"
-        android:contentDescription="Pitch Status"
-        android:src="@drawable/ic_status_off"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/pitchLabel"
-        app:layout_constraintEnd_toStartOf="@id/pitchModeSwitch" />
+        <TextView
+            android:id="@+id/pitchLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Pitch: 0"/>
 
-    <Switch
-        android:id="@+id/pitchModeSwitch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Auto"
-        app:layout_constraintTop_toTopOf="@id/pitchLabel"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- EVENT -->
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/pitchReverseSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="Reverse"
+            android:contentDescription="Toggle to reverse pitch signal interpretation"/>
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/pitchModeSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Auto"
+            android:contentDescription="Toggle automatic control for pitch"/>
+    </LinearLayout>
 
     <SeekBar
         android:id="@+id/pitchSeekBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="8dp"
         android:max="90"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="1.0"
+        android:progress="45"
+        app:layout_constraintTop_toBottomOf="@id/pitchControlsLayout"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/pitchLabel" />
+        app:layout_constraintEnd_toEndOf="parent"
+        android:contentDescription="Manually adjust pitch parameter"/>
+
 
     <TextView
         android:id="@+id/eventLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Event:"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="16dp"
         app:layout_constraintTop_toBottomOf="@id/pitchSeekBar"
         app:layout_constraintStart_toStartOf="parent" />
 
@@ -154,29 +155,22 @@
             android:id="@+id/eventSpinner"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:contentDescription="Select FMOD event type (None, Jump, Drop)"/>
 
-        <ImageView
-            android:id="@+id/eventStatusIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_status_off"
-            android:layout_marginEnd="8dp"
-            android:contentDescription="Event Status"
-            android:visibility="gone" />
-
-        <Switch
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/eventModeSwitch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Auto" />
+            android:text="Auto"
+            android:contentDescription="Toggle automatic control for events"/>
     </LinearLayout>
+
     <TextView
         android:id="@+id/hallDirectionLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Hall Direction:"
-        android:layout_marginTop="32dp"
+        android:text="Direction Source:" android:layout_marginTop="16dp"
         app:layout_constraintTop_toBottomOf="@id/eventRow"
         app:layout_constraintStart_toStartOf="parent" />
 
@@ -195,23 +189,15 @@
             android:id="@+id/hallDirectionSpinner"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:contentDescription="Select direction (Forward/Reverse)"/>
 
-        <ImageView
-            android:id="@+id/hallDirectionStatusIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_status_off"
-            android:layout_marginEnd="8dp"
-            android:contentDescription="Hall Direction Status"
-            android:visibility="gone" />
-
-        <Switch
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/hallDirectionModeSwitch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Auto" />
+            android:text="Auto"
+            android:contentDescription="Toggle automatic control for direction"/>
     </LinearLayout>
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>

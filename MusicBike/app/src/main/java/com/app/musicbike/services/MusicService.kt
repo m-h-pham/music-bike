@@ -3,7 +3,7 @@ package com.app.musicbike.services
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.Service
+import android.app.Service // Make sure Service is imported for STOP_FOREGROUND_REMOVE
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
-import com.app.musicbike.R
+import com.app.musicbike.R // Make sure R is imported correctly
 
 class MusicService : Service() {
 
@@ -87,6 +87,7 @@ class MusicService : Service() {
     private var isPitchInAutoMode = false
     private var isEventInAutoMode = false
     private var isHallDirectionInAutoMode = false
+    private var isPitchSignalReversed = false
 
     private val _currentFmodSpeed = MutableLiveData<Float>(0.0f)
     val currentFmodSpeed: LiveData<Float> get() = _currentFmodSpeed
@@ -100,14 +101,15 @@ class MusicService : Service() {
     private val speedObserver = Observer<Float> { speed ->
         if (isSpeedInAutoMode) {
             val clampedSpeed = speed.coerceIn(0f, 25f)
-            Log.d(TAG, "AUTO MODE: Setting Wheel Speed to $clampedSpeed")
+            // Log.d(TAG, "AUTO MODE: Setting Wheel Speed to $clampedSpeed") // Verbose, uncomment if needed
             setFmodParameterInternal("Wheel Speed", clampedSpeed)
         }
     }
-    private val pitchObserver = Observer<Float> { pitch ->
+    private val pitchObserver = Observer<Float> { rawPitch ->
         if (isPitchInAutoMode) {
-            val clampedPitch = pitch.coerceIn(-45f, 45f)
-            Log.d(TAG, "AUTO MODE: Setting Pitch to $clampedPitch")
+            val finalPitch = if (isPitchSignalReversed) -rawPitch else rawPitch // Apply reversal
+            val clampedPitch = finalPitch.coerceIn(-45f, 45f) // Example clamping
+            Log.d(TAG, "AUTO MODE: Setting Pitch to $clampedPitch (raw: $rawPitch, reversed: $isPitchSignalReversed)")
             setFmodParameterInternal("Pitch", clampedPitch)
         }
     }
@@ -132,7 +134,7 @@ class MusicService : Service() {
     }
     private val hallDirectionObserver = Observer<Int> { direction ->
         if (isHallDirectionInAutoMode) {
-            Log.d(TAG, "AUTO MODE: Setting Hall Direction to $direction")
+            // Log.d(TAG, "AUTO MODE: Setting Hall Direction to $direction") // Verbose
             setFmodParameterInternal("Hall Direction", direction.toFloat())
         }
     }
@@ -178,18 +180,18 @@ class MusicService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW)
-            // Removed: description = "Channel for background music playback service"
             notificationManager.createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(contentText: String): Notification {
-        val iconResId = R.drawable.ic_music_notification
+        val iconResId = R.drawable.ic_music_notification // Ensure this drawable exists
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Music Bike Playback")
             .setContentText(contentText)
             .setSmallIcon(iconResId)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true) // Good practice for foreground service notifications
             .build()
     }
 
@@ -204,9 +206,31 @@ class MusicService : Service() {
         return binder
     }
 
+    // --- ADDED onTaskRemoved ---
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "onTaskRemoved called - app task swiped away by user.")
+
+        pause() // Command FMOD to pause/stop playback
+
+        // Stop foreground state and remove notification
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // Android 7.0 (Nougat) / API 24
+            stopForeground(Service.STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+
+        stopSelf() // Stop the service itself
+        Log.i(TAG, "MusicService stopped due to task removal.")
+
+        super.onTaskRemoved(rootIntent)
+    }
+    // --- END ADDED onTaskRemoved ---
+
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy: MusicService being destroyed.")
+
         if (bleServiceBound) {
             bleService?.speed?.removeObserver(speedObserver)
             bleService?.pitch?.removeObserver(pitchObserver)
@@ -216,13 +240,21 @@ class MusicService : Service() {
             bleServiceBound = false
             bleService = null
         }
+
         nativeStopFMODUpdateThread()
-        stopForeground(true)
+        // stopForeground(true) is implicitly handled by stopSelf() if service is stopped,
+        // but explicitly calling it in onTaskRemoved is good for immediate notification removal.
+        // If onDestroy is called for other reasons while foregrounded, it might also be good here,
+        // but often stopSelf() is enough to trigger system cleanup of foreground state.
+        // For safety, if not already stopped via onTaskRemoved:
+        // stopForeground(Service.STOP_FOREGROUND_REMOVE) // Or stopForeground(true) for older
+
         org.fmod.FMOD.close()
         Log.d(TAG, "FMOD closed in MusicService.")
         Log.d(TAG, "MusicService onDestroy completed.")
     }
 
+    // --- Public Control Methods ---
     fun play() {
         Log.d(TAG, "play() called.")
         if (nativeIsFMODPaused()) {
@@ -271,14 +303,12 @@ class MusicService : Service() {
         nativePlayFMODEvent()
     }
 
-    // CORRECTED isPlaying() function
     fun isPlaying(): Boolean {
         val isPaused = nativeIsFMODPaused()
-        // Log.d(TAG, "isPlaying() -> nativeIsFMODPaused() returned: $isPaused. So, playing is ${!isPaused}")
-        return !isPaused // Ensure this line exists and is correct
+        return !isPaused
     }
 
-
+    // --- Public Methods to Control Auto Modes ---
     fun setAutoSpeedMode(enabled: Boolean) {
         isSpeedInAutoMode = enabled
         Log.d(TAG, "Auto Speed Mode set to: $enabled")
@@ -321,4 +351,19 @@ class MusicService : Service() {
             }
         }
     }
+
+    fun setPitchSignalReversal(reversed: Boolean) {
+        isPitchSignalReversed = reversed
+        Log.d(TAG, "Pitch Signal Reversal set to: $reversed")
+        // If pitch is in auto mode, immediately apply the new reversal state to the current FMOD parameter
+        if (isPitchInAutoMode) {
+            bleService?.pitch?.value?.let { currentRawPitch ->
+                val finalPitch = if (isPitchSignalReversed) -currentRawPitch else currentRawPitch
+                val clampedPitch = finalPitch.coerceIn(-45f, 45f)
+                Log.d(TAG, "AUTO MODE (Reversal Changed): Updating Pitch to $clampedPitch")
+                setFmodParameterInternal("Pitch", clampedPitch)
+            }
+        }
+    }
+
 }

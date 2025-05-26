@@ -279,10 +279,33 @@ class BleService : Service() {
         closeGatt()
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "onTaskRemoved called for BleService - app task swiped away.")
+
+        // Gracefully shut down BLE operations
+        Log.i(TAG, "Stopping scan, disconnecting, and closing GATT due to task removal.")
+        stopScan()   // Call your existing stopScan() method
+        disconnect() // Call your existing disconnect() method
+        closeGatt()  // Call your existing closeGatt() method
+
+        // Stop foreground state and remove notification
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // Android 7.0 (Nougat) / API 24
+            stopForeground(Service.STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+
+        stopSelf() // Stop the service itself
+        Log.i(TAG, "BleService stopped due to task removal.")
+
+        super.onTaskRemoved(rootIntent)
+    }
+
     fun disconnectAndStopService() {
         Log.i(TAG, "disconnectAndStopService called.")
         disconnect()
-        // closeGatt() is usually called by disconnect's onConnectionStateChange,
+        closeGatt() // is usually called by disconnect's onConnectionStateChange,
         // but ensure resources are released if disconnect() doesn't complete fully.
         // If closeGatt also handles _connectionStatus.postValue("Disconnected"), it's fine.
         // Explicitly calling closeGatt here ensures cleanup if disconnect() itself doesn't fully manage it.

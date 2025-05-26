@@ -120,6 +120,8 @@ class MusicViewModel : ViewModel() {
     val isEventAuto: LiveData<Boolean> get() = _isEventAuto
     private val _isHallDirectionAuto = MutableLiveData<Boolean>(false)
     val isHallDirectionAuto: LiveData<Boolean> get() = _isHallDirectionAuto
+    private val _isPitchSignalReversed = MutableLiveData<Boolean>(loadPitchSignalReversalPreference()) // Initialize from SharedPreferences
+    val isPitchSignalReversed: LiveData<Boolean> get() = _isPitchSignalReversed
 
     fun setWheelSpeedAuto(isAuto: Boolean) {
         _isWheelSpeedAuto.postValue(isAuto)
@@ -141,7 +143,31 @@ class MusicViewModel : ViewModel() {
         musicService?.setAutoHallDirectionMode(isAuto)
         Log.d(TAG, "setHallDirectionAuto: $isAuto")
     }
-    // ---
+    fun togglePitchSignalReversal() {
+        val currentReversalState = _isPitchSignalReversed.value ?: false
+        val newState = !currentReversalState
+        _isPitchSignalReversed.postValue(newState)
+        musicService?.setPitchSignalReversal(newState) // Inform MusicService
+        savePitchSignalReversalPreference(newState)    // Save to SharedPreferences
+        Log.d(TAG, "Pitch signal reversal toggled to: $newState")
+    }
+
+    private fun savePitchSignalReversalPreference(isReversed: Boolean) {
+        // TODO: Implement SharedPreferences saving for pitch reversal
+        // Example:
+        // val prefs = applicationContext.getSharedPreferences("MusicBikePrefs", Context.MODE_PRIVATE)
+        // prefs.edit().putBoolean("pitch_signal_reversed", isReversed).apply()
+        Log.d(TAG, "Pitch reversal preference saved: $isReversed (Implement SharedPreferences)")
+    }
+
+    private fun loadPitchSignalReversalPreference(): Boolean {
+        // TODO: Implement SharedPreferences loading for pitch reversal
+        // Example:
+        // val prefs = applicationContext.getSharedPreferences("MusicBikePrefs", Context.MODE_PRIVATE)
+        // return prefs.getBoolean("pitch_signal_reversed", false) // Default to false
+        Log.d(TAG, "Pitch reversal preference loaded (Implement SharedPreferences)")
+        return false // Default placeholder
+    }
 
     override fun onCleared() {
         super.onCleared()
