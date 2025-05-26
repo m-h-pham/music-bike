@@ -133,6 +133,12 @@ Java_com_app_musicbike_services_MusicService_nativeStartFMODPlayback(
     }
     LOGI("Instance created for event:/Bike");
 
+    result = eventInstance->start();  // <-- this is the fix
+    if (!checkFMODError(result, "eventInstance->start() in nativeStartFMODPlayback")) {
+        LOGE("Failed to start event:/Bike after creation.");
+    }
+
+
     if (studioSystem && !isRunning.load(std::memory_order_relaxed)) {
         if (updateThread != nullptr) {
             LOGW("nativeStartFMODPlayback: Old updateThread object found while not running. Deleting.");
@@ -166,33 +172,20 @@ Java_com_app_musicbike_services_MusicService_nativeSetFMODParameter(
     std::lock_guard<std::mutex> lock(fmodMutex);
     FMOD_RESULT result;
 
-    // Handle event-specific parameters first
-    if (paramNameStdStr == "Hall Direction" || paramNameStdStr == "Event") {
-        if (eventInstance) {
-            result = eventInstance->setParameterByName(paramNameCStr, value);
-            if (checkFMODError(result, ("eventInstance->setParameterByName for " + paramNameStdStr).c_str())) {
-                LOGI("FMOD event parameter '%s' set to %f", paramNameCStr, value);
-            }
+    if (studioSystem) {
+        result = studioSystem->setParameterByName(paramNameCStr, value);
+        if (checkFMODError(result, ("studioSystem->setParameterByName for " + paramNameStdStr).c_str())) {
+            LOGI("FMOD global parameter '%s' set to %f", paramNameCStr, value);
         } else {
-            LOGE("Cannot set event parameter '%s': eventInstance is null.", paramNameCStr);
-        }
-    }
-        // Handle global parameters (like Wheel Speed, Pitch, if they are indeed global)
-        // You might need to list your known global parameters here
-    else if (paramNameStdStr == "Wheel Speed" || paramNameStdStr == "Pitch") {
-        if (studioSystem) {
-            result = studioSystem->setParameterByName(paramNameCStr, value);
-            if (checkFMODError(result, ("studioSystem->setParameterByName for " + paramNameStdStr).c_str())) {
-                LOGI("FMOD global parameter '%s' set to %f", paramNameCStr, value);
-            }
-        } else {
-            LOGE("Cannot set global parameter '%s': FMOD Studio System is null.", paramNameCStr);
+            LOGE("FMOD global parameter '%s' FAILED to set", paramNameCStr);
         }
     } else {
-        LOGW("Unknown FMOD parameter name: %s. Not set.", paramNameCStr);
+        LOGE("studioSystem is null, cannot set parameter %s", paramNameCStr);
     }
+
     env->ReleaseStringUTFChars(paramNameJava, paramNameCStr);
 }
+
 
 JNIEXPORT void JNICALL
 Java_com_app_musicbike_services_MusicService_nativeToggleFMODPlayback(
