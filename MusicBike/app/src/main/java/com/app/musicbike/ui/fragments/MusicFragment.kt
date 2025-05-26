@@ -61,6 +61,20 @@ class MusicFragment : Fragment() {
         Log.d(TAG, "onMusicServiceReady called with service: $service")
         // Pass viewLifecycleOwner for observing LiveData from the service via the ViewModel
         musicViewModel.setMusicService(service, viewLifecycleOwner)
+        val allBanks = requireContext().assets.list("")?.filter {
+            it.endsWith(".bank") && !it.endsWith("strings.bank")
+        } ?: emptyList()
+
+        val bankNames = allBanks.map { it.removeSuffix(".bank") }
+
+        if (bankNames.isNotEmpty()) {
+            val initialBankName = bankNames[0]
+            val bankFileName = allBanks[0]
+            val masterBankPath = copyAssetToInternalStorage(bankFileName)
+            val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
+            musicViewModel.loadBank(masterBankPath, stringsBankPath, initialBankName)
+        }
+
         // Initial UI update based on ViewModel state (which should reflect service state)
         observeViewModel() // Ensure observers are set up after service is available
     }
