@@ -59,24 +59,25 @@ class MusicFragment : Fragment() {
     // Called by MainActivity when MusicService is ready
     fun onMusicServiceReady(service: MusicService?) {
         Log.d(TAG, "onMusicServiceReady called with service: $service")
+        // Pass viewLifecycleOwner for observing LiveData from the service via the ViewModel
         musicViewModel.setMusicService(service, viewLifecycleOwner)
-
-        // Ensure UI is fully initialized (spinner populated)
-        val selectedBankName = binding.bankSelector.selectedItem?.toString() ?: "Master"
         val allBanks = requireContext().assets.list("")?.filter {
             it.endsWith(".bank") && !it.endsWith("strings.bank")
         } ?: emptyList()
 
-        val selectedFileName = allBanks.firstOrNull { it.removeSuffix(".bank") == selectedBankName }
-            ?: allBanks.firstOrNull() ?: return
+        val bankNames = allBanks.map { it.removeSuffix(".bank") }
 
-        val masterBankPath = copyAssetToInternalStorage(selectedFileName)
-        val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
-        musicViewModel.loadBank(masterBankPath, stringsBankPath, selectedBankName)
+        if (bankNames.isNotEmpty()) {
+            val initialBankName = bankNames[0]
+            val bankFileName = allBanks[0]
+            val masterBankPath = copyAssetToInternalStorage(bankFileName)
+            val stringsBankPath = copyAssetToInternalStorage("Master.strings.bank")
+            musicViewModel.loadBank(masterBankPath, stringsBankPath, initialBankName)
+        }
 
-        observeViewModel()
+        // Initial UI update based on ViewModel state (which should reflect service state)
+        observeViewModel() // Ensure observers are set up after service is available
     }
-
 
     private fun copyAssetToInternalStorage(assetName: String): String {
         val file = File(requireContext().filesDir, assetName)
@@ -127,10 +128,6 @@ class MusicFragment : Fragment() {
         val bankAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, bankNames)
         bankAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         bankSpinner.adapter = bankAdapter
-
-        val defaultBankIndex = bankNames.indexOf("Master").takeIf { it >= 0 } ?: 0
-        bankSpinner.setSelection(defaultBankIndex)
-
         bankSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
                 if (allBanks.isNotEmpty() && position < allBanks.size) {

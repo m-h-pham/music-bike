@@ -133,7 +133,7 @@ Java_com_app_musicbike_services_MusicService_nativeStartFMODPlayback(
     }
     LOGI("Instance created for event:/Bike");
 
-    // result = eventInstance->start();  // <-- this is the fix
+    result = eventInstance->start();  // <-- this is the fix
     if (!checkFMODError(result, "eventInstance->start() in nativeStartFMODPlayback")) {
         LOGE("Failed to start event:/Bike after creation.");
     }
