@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
@@ -26,12 +27,21 @@ class MusicService : Service() {
     private val TAG = "MusicService"
     private val binder = LocalBinder()
     private lateinit var notificationManager: NotificationManager
+    private lateinit var prefs: SharedPreferences
 
     // --- FMOD Native Interface ---
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "MusicServiceChannel"
         private const val NOTIFICATION_CHANNEL_NAME = "Music Playback Service"
         private const val ONGOING_NOTIFICATION_ID = 102
+
+        // SharedPreferences Keys for Stats
+        private const val PREFS_NAME = "MusicBikeRideStats"
+        private const val KEY_MAX_SPEED = "maxSpeed"
+        private const val KEY_MAX_POSITIVE_PITCH = "maxPositivePitch"
+        private const val KEY_MIN_NEGATIVE_PITCH = "minNegativePitch" // Will store as positive value
+        private const val KEY_JUMP_COUNT = "jumpCount"
+        private const val KEY_DROP_COUNT = "dropCount"
 
         init {
             try {
@@ -83,14 +93,17 @@ class MusicService : Service() {
     }
     // --- End BleService Connection ---
 
+    // --- Auto Mode State Variables ---
     private var isSpeedInAutoMode = false
     private var isPitchInAutoMode = false
     private var isEventInAutoMode = false
     private var isHallDirectionInAutoMode = false
     private var isPitchSignalReversed = false
 
+    // --- LiveData for current FMOD parameter values (exposed to ViewModel) ---
     private val _currentFmodSpeed = MutableLiveData<Float>(0.0f)
     val currentFmodSpeed: LiveData<Float> get() = _currentFmodSpeed
+    // ... (other _currentFmod... LiveData)
     private val _currentFmodPitch = MutableLiveData<Float>(0.0f)
     val currentFmodPitch: LiveData<Float> get() = _currentFmodPitch
     private val _currentFmodEventParameter = MutableLiveData<Float>(0.0f)
@@ -98,24 +111,50 @@ class MusicService : Service() {
     private val _currentFmodHallDirection = MutableLiveData<Float>(1.0f)
     val currentFmodHallDirection: LiveData<Float> get() = _currentFmodHallDirection
 
+    // LiveData for RIDE STATS (to be observed by ViewModel)
+    private val _rideMaxSpeed = MutableLiveData<Float>(0f)
+    val rideMaxSpeed: LiveData<Float> get() = _rideMaxSpeed
+
+    private val _rideMaxPositivePitch = MutableLiveData<Float>(0f)
+    val rideMaxPositivePitch: LiveData<Float> get() = _rideMaxPositivePitch
+
+    private val _rideMinNegativePitch = MutableLiveData<Float>(0f) // Stores absolute value, display will negate
+    val rideMinNegativePitch: LiveData<Float> get() = _rideMinNegativePitch
+
+    private val _rideJumpCount = MutableLiveData<Int>(0)
+    val rideJumpCount: LiveData<Int> get() = _rideJumpCount
+
+    private val _rideDropCount = MutableLiveData<Int>(0)
+    val rideDropCount: LiveData<Int> get() = _rideDropCount
+    // --- END RIDE STATS LiveData ---
+
+    // Observers for BleService LiveData - UPDATED to also update stats
     private val speedObserver = Observer<Float> { speed ->
+        updateMaxSpeedStat(speed) // Update stat
         if (isSpeedInAutoMode) {
             val clampedSpeed = speed.coerceIn(0f, 25f)
-            // Log.d(TAG, "AUTO MODE: Setting Wheel Speed to $clampedSpeed") // Verbose, uncomment if needed
             setFmodParameterInternal("Wheel Speed", clampedSpeed)
         }
     }
+
     private val pitchObserver = Observer<Float> { rawPitch ->
+        updatePitchStats(rawPitch) // Update stat
         if (isPitchInAutoMode) {
-            val finalPitch = if (isPitchSignalReversed) -rawPitch else rawPitch // Apply reversal
-            val clampedPitch = finalPitch.coerceIn(-45f, 45f) // Example clamping
-            Log.d(TAG, "AUTO MODE: Setting Pitch to $clampedPitch (raw: $rawPitch, reversed: $isPitchSignalReversed)")
+            val finalPitch = if (isPitchSignalReversed) -rawPitch else rawPitch
+            val clampedPitch = finalPitch.coerceIn(-45f, 45f)
             setFmodParameterInternal("Pitch", clampedPitch)
         }
     }
+
     private val eventObserver = Observer<String> { event ->
+        // Note: FMOD "Event" parameter is set when an event occurs.
+        // Stat counting should happen based on the incoming 'event' string.
+        when (event.uppercase(java.util.Locale.US)) {
+            "JUMP" -> incrementJumpCountStat()
+            "DROP" -> incrementDropCountStat()
+        }
+
         if (isEventInAutoMode && event != "NONE") {
-            Log.d(TAG, "AUTO MODE: Received event $event, setting FMOD event parameter.")
             val eventValue = when (event.uppercase(java.util.Locale.US)) {
                 "JUMP" -> 1.0f
                 "DROP" -> 2.0f
@@ -125,16 +164,17 @@ class MusicService : Service() {
                 setFmodParameterInternal("Event", eventValue)
                 Handler(Looper.getMainLooper()).postDelayed({
                     if (isEventInAutoMode && _currentFmodEventParameter.value == eventValue) {
-                        Log.d(TAG, "AUTO MODE: Resetting Event parameter to 0.0f")
                         setFmodParameterInternal("Event", 0.0f)
                     }
                 }, 500)
             }
         }
     }
+
     private val hallDirectionObserver = Observer<Int> { direction ->
+        // This observer handles Hall Direction for FMOD auto mode
+        // It does not directly contribute to the stats we defined (max speed, pitch, jump/drop counts)
         if (isHallDirectionInAutoMode) {
-            // Log.d(TAG, "AUTO MODE: Setting Hall Direction to $direction") // Verbose
             setFmodParameterInternal("Hall Direction", direction.toFloat())
         }
     }
@@ -146,8 +186,11 @@ class MusicService : Service() {
     override fun onCreate() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) // Initialize SharedPreferences
         createNotificationChannel()
         Log.d(TAG, "onCreate: MusicService created.")
+
+        loadRideStats() // Load persisted stats
 
         org.fmod.FMOD.init(this)
         val fmodIsInitialized: Boolean = org.fmod.FMOD.checkInit()
@@ -162,7 +205,6 @@ class MusicService : Service() {
 
         val bleServiceIntent = Intent(this, BleService::class.java)
         bindService(bleServiceIntent, bleServiceConnection, Context.BIND_AUTO_CREATE)
-        Log.d(TAG, "MusicService attempting to bind to BleService.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -206,26 +248,32 @@ class MusicService : Service() {
         return binder
     }
 
-    // --- ADDED onTaskRemoved ---
     override fun onTaskRemoved(rootIntent: Intent?) {
         Log.d(TAG, "onTaskRemoved called - app task swiped away by user.")
 
-        pause() // Command FMOD to pause/stop playback
+        if (isPlaying()) { // isPlaying() uses nativeIsFMODPaused(), which should be true if actually playing
+            Log.i(TAG, "onTaskRemoved: Music was playing, attempting to pause it via nativeToggleFMODPlayback.");
+            nativeToggleFMODPlayback(); // This should toggle a playing event to paused
+        } else {
+            Log.i(TAG, "onTaskRemoved: Music was already not playing (paused or stopped). No playback action taken.");
+            // If it was stopped, we do nothing that would start it.
+            // If it was paused, it remains paused (which is fine for stopping the service).
+        }
 
-        // Stop foreground state and remove notification
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // Android 7.0 (Nougat) / API 24
+        updateNotification("Music Service Shutting Down"); // Update notification appropriately
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(Service.STOP_FOREGROUND_REMOVE)
         } else {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
 
-        stopSelf() // Stop the service itself
+        stopSelf()
         Log.i(TAG, "MusicService stopped due to task removal.")
 
         super.onTaskRemoved(rootIntent)
     }
-    // --- END ADDED onTaskRemoved ---
 
     override fun onDestroy() {
         super.onDestroy()
@@ -365,5 +413,70 @@ class MusicService : Service() {
             }
         }
     }
+    // Stat Update, Persistence, and Reset Logic for MusicService
+    private fun updateMaxSpeedStat(currentSpeed: Float) {
+        val currentMax = _rideMaxSpeed.value ?: 0f
+        if (currentSpeed > currentMax) {
+            _rideMaxSpeed.postValue(currentSpeed)
+            prefs.edit().putFloat(KEY_MAX_SPEED, currentSpeed).apply()
+            Log.d(TAG, "New Max Speed: $currentSpeed")
+        }
+    }
 
+    private fun updatePitchStats(currentPitch: Float) {
+        val currentMaxPos = _rideMaxPositivePitch.value ?: 0f
+        val currentMinNegStored = _rideMinNegativePitch.value ?: 0f // This is stored as positive
+
+        if (currentPitch > 0 && currentPitch > currentMaxPos) {
+            _rideMaxPositivePitch.postValue(currentPitch)
+            prefs.edit().putFloat(KEY_MAX_POSITIVE_PITCH, currentPitch).apply()
+            Log.d(TAG, "New Max Positive Pitch: $currentPitch")
+        } else if (currentPitch < 0 && -currentPitch > currentMinNegStored) {
+            // store absolute value for minNegativePitch (which is a max of the negative magnitude)
+            val newMinNegMagnitude = -currentPitch
+            _rideMinNegativePitch.postValue(newMinNegMagnitude)
+            prefs.edit().putFloat(KEY_MIN_NEGATIVE_PITCH, newMinNegMagnitude).apply()
+            Log.d(TAG, "New Min Negative Pitch (stored as positive): $newMinNegMagnitude (actual: $currentPitch)")
+        }
+    }
+
+    private fun incrementJumpCountStat() {
+        val newCount = (_rideJumpCount.value ?: 0) + 1
+        _rideJumpCount.postValue(newCount)
+        prefs.edit().putInt(KEY_JUMP_COUNT, newCount).apply()
+        Log.d(TAG, "Jump count: $newCount")
+    }
+
+    private fun incrementDropCountStat() {
+        val newCount = (_rideDropCount.value ?: 0) + 1
+        _rideDropCount.postValue(newCount)
+        prefs.edit().putInt(KEY_DROP_COUNT, newCount).apply()
+        Log.d(TAG, "Drop count: $newCount")
+    }
+
+    fun resetRideStats() {
+        Log.i(TAG, "Resetting ride stats in MusicService.")
+        _rideMaxSpeed.postValue(0f)
+        _rideMaxPositivePitch.postValue(0f)
+        _rideMinNegativePitch.postValue(0f)
+        _rideJumpCount.postValue(0)
+        _rideDropCount.postValue(0)
+
+        prefs.edit()
+            .putFloat(KEY_MAX_SPEED, 0f)
+            .putFloat(KEY_MAX_POSITIVE_PITCH, 0f)
+            .putFloat(KEY_MIN_NEGATIVE_PITCH, 0f)
+            .putInt(KEY_JUMP_COUNT, 0)
+            .putInt(KEY_DROP_COUNT, 0)
+            .apply()
+    }
+
+    private fun loadRideStats() {
+        _rideMaxSpeed.value = prefs.getFloat(KEY_MAX_SPEED, 0f)
+        _rideMaxPositivePitch.value = prefs.getFloat(KEY_MAX_POSITIVE_PITCH, 0f)
+        _rideMinNegativePitch.value = prefs.getFloat(KEY_MIN_NEGATIVE_PITCH, 0f)
+        _rideJumpCount.value = prefs.getInt(KEY_JUMP_COUNT, 0)
+        _rideDropCount.value = prefs.getInt(KEY_DROP_COUNT, 0)
+        Log.i(TAG, "Ride stats loaded from SharedPreferences in MusicService.")
+    }
 }

@@ -1,32 +1,31 @@
 package com.app.musicbike.ui.viewmodels
 
-import android.app.Application // Import Application for AndroidViewModel
-import android.content.Context // Import Context for SharedPreferences
+import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
-//import androidx.lifecycle.ViewModel
 import com.app.musicbike.services.MusicService
 
-// Change ViewModel to AndroidViewModel to easily access SharedPreferences via applicationContext
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val TAG = "MusicViewModel"
-    private val prefs = application.getSharedPreferences("MusicBikeRideStats", Context.MODE_PRIVATE)
+    // SharedPreferences for UI settings like auto-modes and pitch reversal
+    private val uiPrefs = application.getSharedPreferences("MusicBikeUISettings", Context.MODE_PRIVATE)
 
     private var musicService: MusicService? = null
 
-    // LiveData for UI state observed by MusicFragment
+    // --- LiveData for UI state observed by MusicFragment ---
     private val _isPlaying = MutableLiveData<Boolean>(false)
     val isPlaying: LiveData<Boolean> get() = _isPlaying
 
-    // ... (other LiveData like _currentBankName, _wheelSpeedDisplay, etc., remain the same)
     private val _currentBankName = MutableLiveData<String>("None")
     val currentBankName: LiveData<String> get() = _currentBankName
 
+    // These LiveData are for displaying FMOD parameters (updated by service's LiveData)
     private val _wheelSpeedDisplay = MutableLiveData<Float>(0f)
     val wheelSpeedDisplay: LiveData<Float> get() = _wheelSpeedDisplay
 
@@ -39,14 +38,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _hallDirectionDisplayValue = MutableLiveData<Float>(1f)
     val hallDirectionDisplayValue: LiveData<Float> get() = _hallDirectionDisplayValue
 
-    // ---LiveData for Ride Stats ---
+    // --- LiveData for Ride Stats (now populated by observing MusicService) ---
     private val _maxSpeed = MutableLiveData<Float>(0f)
     val maxSpeed: LiveData<Float> get() = _maxSpeed
 
     private val _maxPositivePitch = MutableLiveData<Float>(0f)
     val maxPositivePitch: LiveData<Float> get() = _maxPositivePitch
 
-    private val _minNegativePitch = MutableLiveData<Float>(0f) // Stores as positive, display as negative
+    private val _minNegativePitch = MutableLiveData<Float>(0f)
     val minNegativePitch: LiveData<Float> get() = _minNegativePitch
 
     private val _jumpCount = MutableLiveData<Int>(0)
@@ -54,59 +53,73 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _dropCount = MutableLiveData<Int>(0)
     val dropCount: LiveData<Int> get() = _dropCount
-    // --- END stats---
+    // --- END Ride Stats LiveData ---
 
-    // Observers for MusicService LiveData
+    // Observers for MusicService's FMOD parameter LiveData
     private var serviceLifecycleOwner: LifecycleOwner? = null
-    private val fmodSpeedObserver = Observer<Float> { speed ->
-        _wheelSpeedDisplay.postValue(speed)
-        updateMaxSpeedStat(speed) // ADDED: Update stat
-    }
-    private val fmodPitchObserver = Observer<Float> { pitch ->
-        _pitchDisplay.postValue(pitch)
-        updatePitchStats(pitch) // ADDED: Update stat
-    }
-    private val fmodEventObserver = Observer<Float> { eventParam -> // eventParam from MusicService is 0, 1, or 2
-        _eventDisplayValue.postValue(eventParam)
-        updateEventCounts(eventParam) // ADDED: Update stat
-    }
-    private val fmodHallDirObserver = Observer<Float> { /* Not directly used for these stats yet */ }
+    private val fmodSpeedObserver = Observer<Float> { speed -> _wheelSpeedDisplay.postValue(speed) }
+    private val fmodPitchObserver = Observer<Float> { pitch -> _pitchDisplay.postValue(pitch) }
+    private val fmodEventObserver = Observer<Float> { eventParam -> _eventDisplayValue.postValue(eventParam) }
+    private val fmodHallDirObserver = Observer<Float> { directionParam -> _hallDirectionDisplayValue.postValue(directionParam) }
+
+    // --- ADDED: Observers for MusicService's RIDE STATS LiveData ---
+    private val rideMaxSpeedObserver = Observer<Float> { value -> _maxSpeed.postValue(value) }
+    private val rideMaxPosPitchObserver = Observer<Float> { value -> _maxPositivePitch.postValue(value) }
+    private val rideMinNegPitchObserver = Observer<Float> { value -> _minNegativePitch.postValue(value) }
+    private val rideJumpCountObserver = Observer<Int> { value -> _jumpCount.postValue(value) }
+    private val rideDropCountObserver = Observer<Int> { value -> _dropCount.postValue(value) }
+    // --- END ADDED RIDE STATS Observers ---
 
 
-    init {
-        loadStats() // Load stats when ViewModel is created
-    }
+    // Removed init block that loaded stats directly; stats will come from service.
 
     fun setMusicService(service: MusicService?, owner: LifecycleOwner) {
-        removeServiceObservers()
+        removeServiceObservers() // Remove from old instance if any
         this.musicService = service
         this.serviceLifecycleOwner = owner
 
         if (this.musicService != null) {
-            _isPlaying.postValue(this.musicService!!.isPlaying())
+            _isPlaying.postValue(this.musicService!!.isPlaying()) // Initial playback state
 
+            // Observe FMOD parameter LiveData from MusicService
             this.musicService!!.currentFmodSpeed.observe(owner, fmodSpeedObserver)
             this.musicService!!.currentFmodPitch.observe(owner, fmodPitchObserver)
             this.musicService!!.currentFmodEventParameter.observe(owner, fmodEventObserver)
             this.musicService!!.currentFmodHallDirection.observe(owner, fmodHallDirObserver)
-            Log.d(TAG, "MusicService instance set and observers attached.")
+
+            // --- ADDED: Observe RIDE STATS LiveData from MusicService ---
+            this.musicService!!.rideMaxSpeed.observe(owner, rideMaxSpeedObserver)
+            this.musicService!!.rideMaxPositivePitch.observe(owner, rideMaxPosPitchObserver)
+            this.musicService!!.rideMinNegativePitch.observe(owner, rideMinNegPitchObserver)
+            this.musicService!!.rideJumpCount.observe(owner, rideJumpCountObserver)
+            this.musicService!!.rideDropCount.observe(owner, rideDropCountObserver)
+            // --- END ADDED RIDE STATS Observation ---
+
+            Log.d(TAG, "MusicService instance set and ALL observers attached.")
         } else {
-            Log.w(TAG, "MusicService instance is null in ViewModel.")
+            Log.w(TAG, "MusicService instance is null in ViewModel. Observers not attached.")
         }
     }
 
     private fun removeServiceObservers() {
-        serviceLifecycleOwner?.let { owner -> // Use stored owner
+        serviceLifecycleOwner?.let { owner ->
             musicService?.currentFmodSpeed?.removeObserver(fmodSpeedObserver)
             musicService?.currentFmodPitch?.removeObserver(fmodPitchObserver)
             musicService?.currentFmodEventParameter?.removeObserver(fmodEventObserver)
             musicService?.currentFmodHallDirection?.removeObserver(fmodHallDirObserver)
+
+            // --- ADDED: Remove RIDE STATS Observers ---
+            musicService?.rideMaxSpeed?.removeObserver(rideMaxSpeedObserver)
+            musicService?.rideMaxPositivePitch?.removeObserver(rideMaxPosPitchObserver)
+            musicService?.rideMinNegativePitch?.removeObserver(rideMinNegPitchObserver)
+            musicService?.rideJumpCount?.removeObserver(rideJumpCountObserver)
+            musicService?.rideDropCount?.removeObserver(rideDropCountObserver)
+            // --- END ADDED ---
         }
-        // Log.d(TAG, "Removed observers from previous MusicService instance if any.")
+        Log.d(TAG, "Removed observers from previous MusicService instance.")
     }
 
     fun togglePlayback() {
-        // ADD LOGS HERE
         Log.d(TAG, "ViewModel togglePlayback() ENTERED.")
         if (musicService == null) {
             Log.e(TAG, "ViewModel togglePlayback: musicService is NULL! Cannot send command.")
@@ -119,7 +132,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         Log.d(TAG, "ViewModel togglePlayback() EXITED. New isPlaying LiveData: ${isPlaying.value}")
     }
 
-    // ... (loadBank, setFmodParameter, playFmodEvent methods remain the same) ...
     fun loadBank(masterBankPath: String, stringsBankPath: String, bankDisplayName: String) {
         musicService?.loadBank(masterBankPath, stringsBankPath)
         _currentBankName.postValue(bankDisplayName)
@@ -143,16 +155,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    // --- Auto Mode Logic (setters call MusicService) ---
-    private val _isWheelSpeedAuto = MutableLiveData<Boolean>(false)
+    // Auto Mode LiveData (loaded from uiPrefs)
+    private val _isWheelSpeedAuto = MutableLiveData<Boolean>(loadBooleanPreference("isWheelSpeedAuto", false))
     val isWheelSpeedAuto: LiveData<Boolean> get() = _isWheelSpeedAuto
-    private val _isPitchAuto = MutableLiveData<Boolean>(false)
+    private val _isPitchAuto = MutableLiveData<Boolean>(loadBooleanPreference("isPitchAuto", false))
     val isPitchAuto: LiveData<Boolean> get() = _isPitchAuto
-    private val _isEventAuto = MutableLiveData<Boolean>(false)
+    private val _isEventAuto = MutableLiveData<Boolean>(loadBooleanPreference("isEventAuto", false))
     val isEventAuto: LiveData<Boolean> get() = _isEventAuto
-    private val _isHallDirectionAuto = MutableLiveData<Boolean>(false)
+    private val _isHallDirectionAuto = MutableLiveData<Boolean>(loadBooleanPreference("isHallDirectionAuto", false))
     val isHallDirectionAuto: LiveData<Boolean> get() = _isHallDirectionAuto
-    private val _isPitchSignalReversed = MutableLiveData<Boolean>(loadPitchSignalReversalPreference()) // Initialize from SharedPreferences
+
+    // Pitch Reversal LiveData (loaded from uiPrefs)
+    private val _isPitchSignalReversed = MutableLiveData<Boolean>(loadBooleanPreference("isPitchSignalReversed", false))
     val isPitchSignalReversed: LiveData<Boolean> get() = _isPitchSignalReversed
 
     fun setWheelSpeedAuto(isAuto: Boolean) {
@@ -204,78 +218,29 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         return false // Default placeholder
     }
 
-    // --- Stat Update and Persistence Logic ---
-    private fun updateMaxSpeedStat(currentSpeed: Float) {
-        if (currentSpeed > (_maxSpeed.value ?: 0f)) {
-            _maxSpeed.postValue(currentSpeed)
-            prefs.edit().putFloat("maxSpeed", currentSpeed).apply()
-        }
-    }
+    // Ride Stats Logic
 
-    private fun updatePitchStats(currentPitch: Float) {
-        if (currentPitch > 0 && currentPitch > (_maxPositivePitch.value ?: 0f)) {
-            _maxPositivePitch.postValue(currentPitch)
-            prefs.edit().putFloat("maxPositivePitch", currentPitch).apply()
-        } else if (currentPitch < 0 && currentPitch < -(_minNegativePitch.value ?: 0f) ) { // store as positive
-            _minNegativePitch.postValue(-currentPitch) // store absolute value
-            prefs.edit().putFloat("minNegativePitch", -currentPitch).apply()
-        }
-    }
-
-    private fun updateEventCounts(eventParam: Float) { // Assuming 1.0f for Jump, 2.0f for Drop
-        when (eventParam.toInt()) {
-            1 -> { // Jump
-                val newCount = (_jumpCount.value ?: 0) + 1
-                _jumpCount.postValue(newCount)
-                prefs.edit().putInt("jumpCount", newCount).apply()
-            }
-            2 -> { // Drop
-                val newCount = (_dropCount.value ?: 0) + 1
-                _dropCount.postValue(newCount)
-                prefs.edit().putInt("dropCount", newCount).apply()
-            }
-        }
-    }
-
+    // resetStats now calls the method in MusicService
     fun resetStats() {
-        _maxSpeed.postValue(0f)
-        _maxPositivePitch.postValue(0f)
-        _minNegativePitch.postValue(0f)
-        _jumpCount.postValue(0)
-        _dropCount.postValue(0)
-
-        prefs.edit()
-            .putFloat("maxSpeed", 0f)
-            .putFloat("maxPositivePitch", 0f)
-            .putFloat("minNegativePitch", 0f)
-            .putInt("jumpCount", 0)
-            .putInt("dropCount", 0)
-            .apply()
-        Log.i(TAG, "Ride stats reset.")
+        Log.i(TAG, "ViewModel requesting MusicService to reset ride stats.")
+        musicService?.resetRideStats()
+        // The LiveData in this ViewModel (_maxSpeed, etc.) will automatically update
+        // because they are observing the LiveData from MusicService, which will be reset.
     }
 
-    private fun loadStats() {
-        _maxSpeed.value = prefs.getFloat("maxSpeed", 0f)
-        _maxPositivePitch.value = prefs.getFloat("maxPositivePitch", 0f)
-        _minNegativePitch.value = prefs.getFloat("minNegativePitch", 0f)
-        _jumpCount.value = prefs.getInt("jumpCount", 0)
-        _dropCount.value = prefs.getInt("dropCount", 0)
-        Log.i(TAG, "Ride stats loaded from SharedPreferences.")
-    }
-
-    // Helper for boolean preferences (used for auto modes and pitch reversal)
+    // Helper for boolean UI preferences
     private fun saveBooleanPreference(key: String, value: Boolean) {
-        prefs.edit().putBoolean(key, value).apply()
+        uiPrefs.edit().putBoolean(key, value).apply()
     }
 
     private fun loadBooleanPreference(key: String, defaultValue: Boolean): Boolean {
-        return prefs.getBoolean(key, defaultValue)
+        return uiPrefs.getBoolean(key, defaultValue)
     }
-
 
     override fun onCleared() {
         super.onCleared()
         removeServiceObservers()
+        this.musicService = null
         Log.d(TAG, "MusicViewModel cleared.")
     }
 }
