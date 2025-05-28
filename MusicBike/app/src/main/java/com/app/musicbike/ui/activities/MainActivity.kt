@@ -9,6 +9,8 @@ import android.content.pm.PackageManager // ADDED for PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast // ADDED for Toast
 import androidx.activity.result.contract.ActivityResultContracts // ADDED for permission launcher
@@ -59,6 +61,36 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Log.w(TAG, "POST_NOTIFICATIONS permission denied by user.")
                 Toast.makeText(this, "Notification permission denied. Service indicators may not be visible.", Toast.LENGTH_LONG).show()
+            }
+        }
+    // --- END ADDED ---
+
+    // --- ADDED: Bluetooth Permissions Launcher ---
+    private val requiredBluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE
+        )
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private val requestBluetoothPermissionsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            var allGranted = true
+            permissions.entries.forEach {
+                Log.d(TAG, "Bluetooth permission ${it.key} granted: ${it.value}")
+                if (!it.value) allGranted = false
+            }
+            if (allGranted) {
+                Log.d(TAG, "All required Bluetooth permissions granted. Starting BleService...")
+                startAndBindBleService()
+            } else {
+                Log.w(TAG, "Not all Bluetooth permissions were granted.")
+                Toast.makeText(this, "Bluetooth permissions are required for device connectivity.", Toast.LENGTH_LONG).show()
+                // Still start the service, but it will fall back to default foreground service type
+                startAndBindBleService()
             }
         }
     // --- END ADDED ---
@@ -173,8 +205,10 @@ class MainActivity : AppCompatActivity() {
         checkAndRequestNotificationPermission()
         // --- END ADDED ---
 
-        Log.d(TAG, "onCreate: Starting and binding to BleService...")
-        startAndBindBleService()
+        // --- MODIFIED: Check Bluetooth permissions before starting BleService ---
+        Log.d(TAG, "onCreate: Checking Bluetooth permissions before starting BleService...")
+        checkAndRequestBluetoothPermissions()
+        // --- END MODIFIED ---
 
         Log.d(TAG, "onCreate: Starting and binding to MusicService...")
         startAndBindMusicService()
@@ -182,7 +216,6 @@ class MainActivity : AppCompatActivity() {
         // FMOD org.fmod.FMOD.init() and initial FMOD calls are now handled by MusicService
     }
 
-    // --- ADDED: Method to Check and Request Notification Permission ---
     private fun checkAndRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // TIRAMISU is Android 13 (API 33)
             when {
@@ -210,7 +243,20 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "POST_NOTIFICATIONS permission not required for this Android version (SDK < 33).")
         }
     }
-    // --- END ADDED ---
+
+    private fun checkAndRequestBluetoothPermissions() {
+        val missingPermissions = requiredBluetoothPermissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        
+        if (missingPermissions.isEmpty()) {
+            Log.d(TAG, "All Bluetooth permissions already granted. Starting BleService...")
+            startAndBindBleService()
+        } else {
+            Log.d(TAG, "Requesting missing Bluetooth permissions: ${missingPermissions.joinToString()}")
+            requestBluetoothPermissionsLauncher.launch(missingPermissions.toTypedArray())
+        }
+    }
 
     private fun startAndBindBleService() {
         val serviceIntent = Intent(this, BleService::class.java)

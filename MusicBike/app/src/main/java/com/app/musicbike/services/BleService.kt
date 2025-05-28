@@ -177,16 +177,56 @@ class BleService : Service() {
         val initialNotificationText = _connectionStatus.value ?: "BLE service starting..."
         val notification = buildNotification(initialNotificationText)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                ONGOING_NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            )
+        // Check if we have ALL required permissions for FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        val hasConnectPermission = hasConnectPermission()
+        val hasScanPermission = hasScanPermission()
+        val hasAdvertisePermission = hasPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
+        val hasForegroundServicePermission = hasPermission(Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE)
+        
+        Log.d(TAG, "Permission check - Connect: $hasConnectPermission, Scan: $hasScanPermission, Advertise: $hasAdvertisePermission, ForegroundService: $hasForegroundServicePermission")
+        
+        // For CONNECTED_DEVICE type, we need:
+        // 1. FOREGROUND_SERVICE_CONNECTED_DEVICE (required)
+        // 2. At least one of: BLUETOOTH_ADVERTISE, BLUETOOTH_CONNECT, BLUETOOTH_SCAN, etc.
+        val hasRequiredPermissions = hasForegroundServicePermission && 
+            (hasConnectPermission || hasScanPermission || hasAdvertisePermission)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasRequiredPermissions) {
+            try {
+                Log.d(TAG, "Attempting to start foreground service with CONNECTED_DEVICE type")
+                startForeground(
+                    ONGOING_NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                )
+                Log.i(TAG, "Service started in foreground with CONNECTED_DEVICE type.")
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Failed to start with CONNECTED_DEVICE type, falling back to default", e)
+                try {
+                    startForeground(ONGOING_NOTIFICATION_ID, notification)
+                    Log.i(TAG, "Service started in foreground with default type.")
+                } catch (e2: SecurityException) {
+                    Log.e(TAG, "Failed to start foreground service even with default type", e2)
+                    // If we can't start as foreground service at all, stop the service
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+            }
         } else {
-            startForeground(ONGOING_NOTIFICATION_ID, notification)
+            Log.d(TAG, "Starting foreground service with default type (missing permissions or Android < Q)")
+            try {
+                startForeground(ONGOING_NOTIFICATION_ID, notification)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    Log.i(TAG, "Service started in foreground with default type (missing permissions).")
+                } else {
+                    Log.i(TAG, "Service started in foreground (Android < Q).")
+                }
+            } catch (e: SecurityException) {
+                Log.e(TAG, "Failed to start foreground service with default type", e)
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
-        Log.i(TAG, "Service started in foreground.")
         return START_STICKY
     }
 
@@ -323,12 +363,11 @@ class BleService : Service() {
     }
 
     private fun hasScanPermission(): Boolean {
-        val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            hasPermission(Manifest.permission.BLUETOOTH_SCAN)
         } else {
-            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
         }
-        return requiredPermissions.all { hasPermission(it) }
     }
 
     private fun hasConnectPermission(): Boolean {

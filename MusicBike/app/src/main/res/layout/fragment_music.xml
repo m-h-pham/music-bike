@@ -1,252 +1,258 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
+<ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:fillViewport="true">
 
-    <Button
-        android:id="@+id/toggleButton"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:text="Play"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:contentDescription="Toggles music playback (Play/Pause)" />
-
-    <TextView
-        android:id="@+id/bankSelectorLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Select Music Bank:"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/toggleButton"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <Spinner
-        android:id="@+id/bankSelector"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        app:layout_constraintTop_toBottomOf="@id/bankSelectorLabel"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:contentDescription="Dropdown to select FMOD sound bank" />
-
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/autoAllSwitch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Auto All Parameters"
-        app:layout_constraintTop_toBottomOf="@id/bankSelector"
-        app:layout_constraintStart_toStartOf="parent"
-        android:contentDescription="Toggles automatic sensor-driven mode for all parameters" />
-
-    <LinearLayout
-        android:id="@+id/wheelSpeedControlsLayout"
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/autoAllSwitch"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        android:padding="16dp">
+
+        <Button
+            android:id="@+id/toggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Play"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:contentDescription="Toggles music playback (Play/Pause)" />
 
         <TextView
-            android:id="@+id/wheelSpeedLabel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Wheel Speed: 0"/>
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/wheelSpeedModeSwitch"
+            android:id="@+id/bankSelectorLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Auto"
-            android:contentDescription="Toggle automatic control for wheel speed"/>
-    </LinearLayout>
+            android:text="Select Music Bank:"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/toggleButton"
+            app:layout_constraintStart_toStartOf="parent" />
 
-    <SeekBar
-        android:id="@+id/wheelSpeedSeekBar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:max="25"
-        android:progress="0"
-        app:layout_constraintTop_toBottomOf="@id/wheelSpeedControlsLayout"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:contentDescription="Manually adjust wheel speed parameter"/>
+        <Spinner
+            android:id="@+id/bankSelector"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            app:layout_constraintTop_toBottomOf="@id/bankSelectorLabel"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:contentDescription="Dropdown to select FMOD sound bank" />
 
-    <TextView
-        android:id="@+id/maxSpeedStatText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        tools:text="Max Speed: 0.0 km/h"
-        app:layout_constraintTop_toBottomOf="@id/wheelSpeedSeekBar"
-        app:layout_constraintStart_toStartOf="parent"/>
-    <LinearLayout
-        android:id="@+id/pitchControlsLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/maxSpeedStatText"  app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/autoAllSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Auto All Parameters"
+            app:layout_constraintTop_toBottomOf="@id/bankSelector"
+            app:layout_constraintStart_toStartOf="parent"
+            android:contentDescription="Toggles automatic sensor-driven mode for all parameters" />
+
+        <LinearLayout
+            android:id="@+id/wheelSpeedControlsLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/autoAllSwitch"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <TextView
+                android:id="@+id/wheelSpeedLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Wheel Speed: 0"/>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/wheelSpeedModeSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Auto"
+                android:contentDescription="Toggle automatic control for wheel speed"/>
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/wheelSpeedSeekBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:max="25"
+            android:progress="0"
+            app:layout_constraintTop_toBottomOf="@id/wheelSpeedControlsLayout"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:contentDescription="Manually adjust wheel speed parameter"/>
 
         <TextView
-            android:id="@+id/pitchLabel"
+            android:id="@+id/maxSpeedStatText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            tools:text="Max Speed: 0.0 km/h"
+            app:layout_constraintTop_toBottomOf="@id/wheelSpeedSeekBar"
+            app:layout_constraintStart_toStartOf="parent"/>
+        <LinearLayout
+            android:id="@+id/pitchControlsLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/maxSpeedStatText"  app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <TextView
+                android:id="@+id/pitchLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Pitch: 0"/>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/pitchReverseSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:text="Reverse"
+                android:contentDescription="Toggle to reverse pitch signal interpretation"/>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/pitchModeSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Auto"
+                android:contentDescription="Toggle automatic control for pitch"/>
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/pitchSeekBar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Pitch: 0"/>
+            android:layout_marginTop="8dp"
+            android:max="90"
+            android:progress="45"
+            app:layout_constraintTop_toBottomOf="@id/pitchControlsLayout"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:contentDescription="Manually adjust pitch parameter"/>
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/pitchReverseSwitch"
+        <TextView
+            android:id="@+id/maxPositivePitchStatText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="Reverse"
-            android:contentDescription="Toggle to reverse pitch signal interpretation"/>
+            android:layout_marginTop="4dp"
+            tools:text="Max Pitch (Up): 0.0°"
+            app:layout_constraintTop_toBottomOf="@id/pitchSeekBar"
+            app:layout_constraintStart_toStartOf="parent"/>
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/pitchModeSwitch"
+        <TextView
+            android:id="@+id/minNegativePitchStatText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Auto"
-            android:contentDescription="Toggle automatic control for pitch"/>
-    </LinearLayout>
-
-    <SeekBar
-        android:id="@+id/pitchSeekBar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:max="90"
-        android:progress="45"
-        app:layout_constraintTop_toBottomOf="@id/pitchControlsLayout"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:contentDescription="Manually adjust pitch parameter"/>
-
-    <TextView
-        android:id="@+id/maxPositivePitchStatText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        tools:text="Max Pitch (Up): 0.0°"
-        app:layout_constraintTop_toBottomOf="@id/pitchSeekBar"
-        app:layout_constraintStart_toStartOf="parent"/>
-
-    <TextView
-        android:id="@+id/minNegativePitchStatText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        tools:text="Max Pitch (Down): 0.0°"
-        app:layout_constraintTop_toTopOf="@id/maxPositivePitchStatText"
-        app:layout_constraintStart_toEndOf="@id/maxPositivePitchStatText"/>
-    <TextView
-        android:id="@+id/eventLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Event:"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/maxPositivePitchStatText" app:layout_constraintStart_toStartOf="parent" />
-
-    <LinearLayout
-        android:id="@+id/eventRow"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="8dp"
-        app:layout_constraintTop_toBottomOf="@id/eventLabel"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <Spinner
-            android:id="@+id/eventSpinner"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:contentDescription="Select FMOD event type (None, Jump, Drop)"/>
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/eventModeSwitch"
+            android:layout_marginStart="16dp"
+            tools:text="Max Pitch (Down): 0.0°"
+            app:layout_constraintTop_toTopOf="@id/maxPositivePitchStatText"
+            app:layout_constraintStart_toEndOf="@id/maxPositivePitchStatText"/>
+        <TextView
+            android:id="@+id/eventLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Auto"
-            android:contentDescription="Toggle automatic control for events"/>
-    </LinearLayout>
+            android:text="Event:"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/maxPositivePitchStatText" app:layout_constraintStart_toStartOf="parent" />
 
-    <TextView
-        android:id="@+id/jumpCountStatText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        tools:text="Jumps: 0"
-        app:layout_constraintTop_toBottomOf="@id/eventRow"
-        app:layout_constraintStart_toStartOf="parent"/>
-
-    <TextView
-        android:id="@+id/dropCountStatText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        tools:text="Drops: 0"
-        app:layout_constraintTop_toTopOf="@id/jumpCountStatText"
-        app:layout_constraintStart_toEndOf="@id/jumpCountStatText"/>
-    <TextView
-        android:id="@+id/hallDirectionLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Direction Source Control:" android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/jumpCountStatText" app:layout_constraintStart_toStartOf="parent" />
-
-    <LinearLayout
-        android:id="@+id/hallDirectionRow"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="8dp"
-        app:layout_constraintTop_toBottomOf="@id/hallDirectionLabel"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <Spinner
-            android:id="@+id/hallDirectionSpinner"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/eventRow"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:contentDescription="Select direction (Forward/Reverse)"/>
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp"
+            app:layout_constraintTop_toBottomOf="@id/eventLabel"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/hallDirectionModeSwitch"
+            <Spinner
+                android:id="@+id/eventSpinner"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:contentDescription="Select FMOD event type (None, Jump, Drop)"/>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/eventModeSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Auto"
+                android:contentDescription="Toggle automatic control for events"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/jumpCountStatText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Auto"
-            android:contentDescription="Toggle automatic control for direction"/>
-    </LinearLayout>
+            android:layout_marginTop="4dp"
+            tools:text="Jumps: 0"
+            app:layout_constraintTop_toBottomOf="@id/eventRow"
+            app:layout_constraintStart_toStartOf="parent"/>
 
-    <Button
-        android:id="@+id/resetStatsButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Reset Ride Stats"
-        android:layout_marginTop="24dp"
-        app:layout_constraintTop_toBottomOf="@id/hallDirectionRow"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:contentDescription="Resets all current ride statistics to zero"/>
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <TextView
+            android:id="@+id/dropCountStatText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            tools:text="Drops: 0"
+            app:layout_constraintTop_toTopOf="@id/jumpCountStatText"
+            app:layout_constraintStart_toEndOf="@id/jumpCountStatText"/>
+        <TextView
+            android:id="@+id/hallDirectionLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Direction Source Control:" android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/jumpCountStatText" app:layout_constraintStart_toStartOf="parent" />
+
+        <LinearLayout
+            android:id="@+id/hallDirectionRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp"
+            app:layout_constraintTop_toBottomOf="@id/hallDirectionLabel"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <Spinner
+                android:id="@+id/hallDirectionSpinner"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:contentDescription="Select direction (Forward/Reverse)"/>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/hallDirectionModeSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Auto"
+                android:contentDescription="Toggle automatic control for direction"/>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/resetStatsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Reset Ride Stats"
+            android:layout_marginTop="24dp"
+            app:layout_constraintTop_toBottomOf="@id/hallDirectionRow"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:contentDescription="Resets all current ride statistics to zero"/>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
