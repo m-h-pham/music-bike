@@ -21,6 +21,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
 import com.app.musicbike.R // Make sure R is imported correctly
+import com.app.musicbike.InferenceService // Added import
 
 class MusicService : Service() {
 
@@ -28,12 +29,17 @@ class MusicService : Service() {
     private val binder = LocalBinder()
     private lateinit var notificationManager: NotificationManager
     private lateinit var prefs: SharedPreferences
+    private var isInferenceActive = false // Added flag
 
     // --- FMOD Native Interface ---
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "MusicServiceChannel"
         private const val NOTIFICATION_CHANNEL_NAME = "Music Playback Service"
         private const val ONGOING_NOTIFICATION_ID = 102
+
+        // Actions for controlling InferenceService
+        const val ACTION_START_INFERENCE = "com.app.musicbike.services.action.START_INFERENCE" // Added
+        const val ACTION_STOP_INFERENCE = "com.app.musicbike.services.action.STOP_INFERENCE"   // Added
 
         // SharedPreferences Keys for Stats
         private const val PREFS_NAME = "MusicBikeRideStats"
@@ -208,14 +214,44 @@ class MusicService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand: MusicService starting.")
-        val notification = buildNotification(if (isPlaying()) "Playing Music..." else "Music Service Active")
+        Log.d(TAG, "onStartCommand: MusicService action: ${intent?.action}")
+
+        when (intent?.action) {
+            ACTION_START_INFERENCE -> {
+                if (!isInferenceActive) {
+                    val inferenceIntent = Intent(this, InferenceService::class.java)
+                    startService(inferenceIntent)
+                    isInferenceActive = true
+                    Log.d(TAG, "InferenceService started by MusicService.")
+                    updateNotificationWithCurrentState()
+                }
+                return START_STICKY // Stay running for this command
+            }
+            ACTION_STOP_INFERENCE -> {
+                if (isInferenceActive) {
+                    val inferenceIntent = Intent(this, InferenceService::class.java)
+                    stopService(inferenceIntent)
+                    isInferenceActive = false
+                    Log.d(TAG, "InferenceService stopped by MusicService.")
+                    updateNotificationWithCurrentState()
+                }
+                return START_STICKY // Stay running for this command
+            }
+        }
+
+        // Default behavior for starting the service (e.g., from app launch or system restart)
+        val notificationText = if (isPlaying()) {
+            if (isInferenceActive) "Playing Music - Analyzing Data..." else "Playing Music..."
+        } else {
+            if (isInferenceActive) "Music Service Active - Analyzing Data" else "Music Service Active"
+        }
+        val notification = buildNotification(notificationText)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(ONGOING_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
             startForeground(ONGOING_NOTIFICATION_ID, notification)
         }
-        Log.i(TAG, "MusicService started in foreground.")
+        Log.i(TAG, "MusicService started/restarted in foreground.")
         return START_STICKY
     }
 
@@ -228,19 +264,52 @@ class MusicService : Service() {
 
     private fun buildNotification(contentText: String): Notification {
         val iconResId = R.drawable.ic_music_notification // Ensure this drawable exists
+        // Construct the final content text based on playback and inference state
+        val finalContentText = when {
+            isPlaying() && isInferenceActive -> "Playing - Analyzing Data..."
+            isPlaying() && !isInferenceActive -> "Playing Music..."
+            !isPlaying() && isInferenceActive -> "Paused - Analyzing Data" // Or "Music Ready - Analyzing Data"
+            else -> "Music Service Ready" // Or use the passed contentText if more generic states are needed
+        }
+
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Music Bike Playback")
-            .setContentText(contentText)
+            .setContentText(finalContentText) // Use the dynamically constructed text
             .setSmallIcon(iconResId)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true) // Good practice for foreground service notifications
             .build()
     }
 
-    fun updateNotification(newContentText: String) {
+    fun updateNotification(newContentText: String) { // This might be less used now if buildNotification is smart
         if (::notificationManager.isInitialized) {
-            notificationManager.notify(ONGOING_NOTIFICATION_ID, buildNotification(newContentText))
+            // Instead of newContentText, always build based on current state
+            updateNotificationWithCurrentState()
         }
+    }
+
+    // New helper function to update notification based on all current states
+    private fun updateNotificationWithCurrentState() {
+        if (::notificationManager.isInitialized) {
+            val contentText = when {
+                isPlaying() && isInferenceActive -> "Playing - Analyzing Data..."
+                isPlaying() && !isInferenceActive -> "Playing Music..."
+                !isPlaying() && isInferenceActive -> "Paused - Analyzing Data"
+                else -> "Music Paused" // Or "Music Ready" or similar
+            }
+            notificationManager.notify(ONGOING_NOTIFICATION_ID, buildNotification(contentText)) // Pass a representative base text, buildNotification will refine it
+        }
+    }
+
+    // Make sure to call updateNotificationWithCurrentState() when isPlaying() state changes too.
+    // For example, in nativeToggleFMODPlayback() or wherever playback state is directly altered.
+    // This is already implicitly handled if onStartCommand is re-triggered for general startup,
+    // but direct calls after state changes are more robust.
+
+    // Example of where to call it (you'll need to integrate this into your FMOD control logic):
+    fun togglePlaybackAndNotify() { // This is a new suggested method
+        nativeToggleFMODPlayback() // Your existing toggle function
+        updateNotificationWithCurrentState() // Update notification after toggling
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -252,10 +321,10 @@ class MusicService : Service() {
         Log.d(TAG, "onTaskRemoved called - app task swiped away by user.")
 
         if (isPlaying()) { // isPlaying() uses nativeIsFMODPaused(), which should be true if actually playing
-            Log.i(TAG, "onTaskRemoved: Music was playing, attempting to pause it via nativeToggleFMODPlayback.");
-            nativeToggleFMODPlayback(); // This should toggle a playing event to paused
+            Log.i(TAG, "onTaskRemoved: Music was playing, attempting to pause it via nativeToggleFMODPlayback.")
+            togglePlaybackAndNotify() // This should toggle a playing event to paused
         } else {
-            Log.i(TAG, "onTaskRemoved: Music was already not playing (paused or stopped). No playback action taken.");
+            Log.i(TAG, "onTaskRemoved: Music was already not playing (paused or stopped). No playback action taken.")
             // If it was stopped, we do nothing that would start it.
             // If it was paused, it remains paused (which is fine for stopping the service).
         }
@@ -306,7 +375,7 @@ class MusicService : Service() {
     fun play() {
         Log.d(TAG, "play() called.")
         if (nativeIsFMODPaused()) {
-            nativeToggleFMODPlayback()
+            togglePlaybackAndNotify()        
         }
         updateNotification(if (isPlaying()) "Playing Music..." else "Playback Error")
     }
@@ -314,14 +383,14 @@ class MusicService : Service() {
     fun pause() {
         Log.d(TAG, "pause() called.")
         if (!nativeIsFMODPaused()) {
-            nativeToggleFMODPlayback()
+            togglePlaybackAndNotify()
         }
         updateNotification("Music Paused")
     }
 
     fun togglePlayback() {
         Log.d(TAG, "togglePlayback() called.")
-        nativeToggleFMODPlayback()
+        togglePlaybackAndNotify()
         updateNotification(if (isPlaying()) "Playing Music..." else "Music Paused")
     }
 

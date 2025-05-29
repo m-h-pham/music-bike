@@ -69,4 +69,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.fragment.ktx) // Provides viewModels delegate
     implementation(libs.androidx.swiperefreshlayout) // Used for ML file refresh
+    implementation("org.tensorflow:tensorflow-lite:2.16.1") // Updated to latest stable version
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1") // Updated to latest stable version
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4") // Updated to latest stable version
+    implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.16.1") // Additional TF operations
 }

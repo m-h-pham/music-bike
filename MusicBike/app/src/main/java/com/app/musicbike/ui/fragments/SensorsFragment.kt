@@ -3,6 +3,7 @@ package com.app.musicbike.ui.fragments
 import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -26,6 +27,22 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+
+// For runtime permissions
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+
+// For Storage Access Framework
+import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.documentfile.provider.DocumentFile
+import android.preference.PreferenceManager
+import java.io.OutputStream
+
 class SensorsFragment : Fragment() {
 
     private val TAG = "SensorsFragment"
@@ -49,6 +66,30 @@ class SensorsFragment : Fragment() {
     // Used for machine learning file viewer
     private lateinit var fileAdapter: FileAdapter
 
+    // Storage Access Framework support
+    private lateinit var sharedPrefs: SharedPreferences
+    private var selectedDirectoryUri: Uri? = null
+    
+    // Activity result launcher for selecting directory
+    private val selectDirectoryLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                Log.d(TAG, "User selected directory: $uri")
+                handleDirectorySelection(uri)
+            }
+        } else {
+            Log.w(TAG, "User cancelled directory selection")
+            Snackbar.make(binding.root, "Directory selection cancelled", Snackbar.LENGTH_SHORT).show()
+        }
+    }
+
+    private companion object {
+        private const val REQUEST_WRITE_STORAGE_PERMISSION = 101
+        private const val PREF_SELECTED_DIRECTORY_URI = "selected_directory_uri"
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -59,6 +100,10 @@ class SensorsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Initialize SharedPreferences and load previously selected directory
+        sharedPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        loadSelectedDirectory()
 
         // Initialize the slider (0..50 steps → 0.0..5.0s in 0.1s increments)
         binding.seekRecordingDuration.max = 50 // Example: 50 * 0.1f = 5.0 seconds max
@@ -80,23 +125,41 @@ class SensorsFragment : Fragment() {
 
         // Record button
         binding.btnStartRecording.setOnClickListener {
+            Log.d(TAG, "Start Recording button clicked")
+            
+            // First, validate input regardless of permission status
             val filename = binding.editFilename.text?.toString()?.trim().orEmpty()
             if (filename.isEmpty()) {
+                Log.d(TAG, "Validation failed: filename is empty")
                 Snackbar.make(binding.root, "Filename is required", Snackbar.LENGTH_SHORT)
                     .show()
                 return@setOnClickListener
             }
 
             if (recordDurationSec <= 0f) {
+                Log.d(TAG, "Validation failed: duration is $recordDurationSec")
                 Snackbar.make(binding.root, "Set a recording duration > 0 seconds", Snackbar.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             if (isRecording || isCountingDown) {
+                Log.d(TAG, "Validation failed: already recording or counting down")
                 Snackbar.make(binding.root, "A recording or countdown is already in progress.", Snackbar.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            // Filename and duration are valid, start the sequence
+            
+            Log.d(TAG, "Validation passed. Checking permissions...")
+            
+            // Now check and request permissions
+            if (!checkAndRequestStoragePermission()) {
+                Log.d(TAG, "Permission not granted, request initiated")
+                // Permission is not granted and has been requested.
+                // The user will be prompted, and onRequestPermissionsResult will handle the outcome.
+                return@setOnClickListener
+            }
+
+            Log.d(TAG, "Permission granted, starting recording sequence")
+            // Permission is granted and validation passed, start the sequence
             initiateRecordingSequence(filename)
         }
 
@@ -121,7 +184,7 @@ class SensorsFragment : Fragment() {
     private fun initiateRecordingSequence(filename: String) {
         isCountingDown = true
         binding.btnStartRecording.isEnabled = false
-        val countdownDurationMillis = 10000L // 10 seconds
+        val countdownDurationMillis = 5000L // 5 seconds
         val countDownIntervalMillis = 1000L  // 1 second
 
         countdownTimer = object : CountDownTimer(countdownDurationMillis, countDownIntervalMillis) {
@@ -220,21 +283,22 @@ class SensorsFragment : Fragment() {
         binding.btnStartRecording.text = "Start Recording"
         binding.btnStartRecording.isEnabled = true
         countdownTimer?.cancel() // Cancel countdown if stop is called prematurely
+        
         if (recordBuffer.isEmpty() && recordDurationSec > 0) {
             Log.w(TAG, "Recording stopped, but buffer is empty. File will be empty or not created.")
         }
-        val outFile = getUniqueFile(filename)
+        
         try {
-            FileOutputStream(outFile).use { fos ->
-                recordBuffer.forEach { line ->
-                    fos.write((line + "\n").toByteArray())
-                }
+            val bytesToWrite = recordBuffer.joinToString("\n").toByteArray()
+            val sdkVersion = android.os.Build.VERSION.SDK_INT
+            
+            if (sdkVersion >= android.os.Build.VERSION_CODES.Q && selectedDirectoryUri != null) {
+                // Use Storage Access Framework for Android 10+
+                saveFileUsingSAF(filename, bytesToWrite)
+            } else {
+                // Use legacy file system for Android 9 and below
+                saveFileLegacy(filename, bytesToWrite)
             }
-            Snackbar.make(binding.root,
-                "Saved ${recordBuffer.size} lines to ${outFile.name}",
-                Snackbar.LENGTH_SHORT
-            ).show()
-            Log.d(TAG, "Saved to ${outFile.absolutePath}")
         } catch (e: Exception) {
             Log.e(TAG, "Error writing file", e)
             Snackbar.make(binding.root,
@@ -244,13 +308,73 @@ class SensorsFragment : Fragment() {
         }
         recordBuffer.clear() // Clear buffer after saving or attempting to save
     }
+    
+    private fun saveFileUsingSAF(filename: String, data: ByteArray) {
+        try {
+            val treeUri = selectedDirectoryUri ?: throw IllegalStateException("No directory selected")
+            val documentFile = DocumentFile.fromTreeUri(requireContext(), treeUri)
+                ?: throw IllegalStateException("Cannot access selected directory")
+            
+            // Generate unique filename
+            val finalFilename = generateUniqueFilename(documentFile, filename)
+            
+            // Create the file
+            val newFile = documentFile.createFile("text/plain", finalFilename)
+                ?: throw IllegalStateException("Cannot create file in selected directory")
+            
+            // Write data
+            requireContext().contentResolver.openOutputStream(newFile.uri)?.use { outputStream ->
+                outputStream.write(data)
+            }
+            
+            Log.d(TAG, "Saved to SAF: ${newFile.uri}")
+            Snackbar.make(binding.root,
+                "Saved ${recordBuffer.size} lines to $finalFilename",
+                Snackbar.LENGTH_SHORT
+            ).show()
+            
+            // Reload file list
+            loadFileList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving file using SAF", e)
+            throw e
+        }
+    }
+    
+    private fun saveFileLegacy(filename: String, data: ByteArray) {
+        val outFile = getUniqueFileLegacy(filename)
+        FileOutputStream(outFile).use { fos ->
+            fos.write(data)
+        }
+        Snackbar.make(binding.root,
+            "Saved ${recordBuffer.size} lines to Documents/${outFile.name}",
+            Snackbar.LENGTH_SHORT
+        ).show()
+        Log.d(TAG, "Saved to legacy: ${outFile.absolutePath}")
+    }
+    
+    private fun generateUniqueFilename(parentDir: DocumentFile, baseName: String): String {
+        var candidate = "$baseName.txt"
+        var suffix = 1
+        
+        while (parentDir.findFile(candidate) != null) {
+            candidate = "${baseName}_$suffix.txt"
+            suffix++
+        }
+        
+        return candidate
+    }
 
     /**
-     * Returns a File in the app’s internal filesDir that does not
+     * Returns a File in the app's internal filesDir that does not
      * collide with any existing .txt file by appending _1, _2, …
      */
-    private fun getUniqueFile(baseName: String): File {
-        val dir = requireContext().filesDir
+    private fun getUniqueFileLegacy(baseName: String): File {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        // Create the directory if it doesn't exist
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
         // Start with the plain name
         var candidate = File(dir, "$baseName.txt")
         if (!candidate.exists()) return candidate
@@ -328,26 +452,25 @@ class SensorsFragment : Fragment() {
         if (isRecording) {
             // Example: record all relevant values, comma-separated
             val dataLine = String.format(Locale.US,
-                "%.2f,%.2f,%.2f,%.2f,%.2f,%s,%s,%s,%s",
+                "%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f",
                 System.currentTimeMillis() / 1000.0, // timestamp
-                pitchVal, rollVal, yawVal, gForceVal,
-                imuDirVal, hallDirVal, speedStateVal, lastEventVal
+                pitchVal, rollVal, yawVal, gForceVal, hallDirVal, speedVal
             )
             recordBuffer.add(dataLine)
         }
     }
 
     private class FileAdapter(
-        private val onDelete: (File) -> Unit
-    ) : ListAdapter<File, FileAdapter.FileViewHolder>(FILE_DIFF_CALLBACK) {
+        private val onDelete: (FileItemWrapper) -> Unit
+    ) : ListAdapter<FileItemWrapper, FileAdapter.FileViewHolder>(FILE_DIFF_CALLBACK) {
 
         inner class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val txtFilename: TextView = itemView.findViewById(R.id.txtFilename)
             private val btnDelete: ImageButton = itemView.findViewById(R.id.btnDelete)
 
-            fun bind(file: File) {
-                txtFilename.text = file.name
-                btnDelete.setOnClickListener { onDelete(file) }
+            fun bind(fileItem: FileItemWrapper) {
+                txtFilename.text = fileItem.name
+                btnDelete.setOnClickListener { onDelete(fileItem) }
             }
         }
 
@@ -362,23 +485,24 @@ class SensorsFragment : Fragment() {
         }
 
         companion object {
-            private val FILE_DIFF_CALLBACK = object : DiffUtil.ItemCallback<File>() {
-                override fun areItemsTheSame(old: File, new: File) =
-                    old.absolutePath == new.absolutePath
+            private val FILE_DIFF_CALLBACK = object : DiffUtil.ItemCallback<FileItemWrapper>() {
+                override fun areItemsTheSame(old: FileItemWrapper, new: FileItemWrapper) =
+                    old.name == new.name
 
-                override fun areContentsTheSame(old: File, new: File) = true
+                override fun areContentsTheSame(old: FileItemWrapper, new: FileItemWrapper) = 
+                    old.name == new.name
             }
         }
     }
 
     private fun setupFileList() {
         // Initialize adapter (as you already have)
-        fileAdapter = FileAdapter { file ->
-            if (file.delete()) {
-                Snackbar.make(binding.root, "Deleted ${file.name}", Snackbar.LENGTH_SHORT).show()
+        fileAdapter = FileAdapter { fileItem ->
+            if (fileItem.delete()) {
+                Snackbar.make(binding.root, "Deleted ${fileItem.name}", Snackbar.LENGTH_SHORT).show()
                 loadFileList()
             } else {
-                Snackbar.make(binding.root, "Failed to delete ${file.name}", Snackbar.LENGTH_SHORT).show()
+                Snackbar.make(binding.root, "Failed to delete ${fileItem.name}", Snackbar.LENGTH_SHORT).show()
             }
         }
 
@@ -398,12 +522,221 @@ class SensorsFragment : Fragment() {
         loadFileList()
     }
 
+    private fun checkAndRequestStoragePermission(): Boolean {
+        Log.d(TAG, "Checking storage permission...")
+        
+        val sdkVersion = android.os.Build.VERSION.SDK_INT
+        Log.d(TAG, "Android SDK version: $sdkVersion")
+        
+        return if (sdkVersion >= android.os.Build.VERSION_CODES.Q) {
+            // Android 10+ (API 29+): Use Storage Access Framework
+            Log.d(TAG, "Using Storage Access Framework for Android 10+")
+            
+            if (selectedDirectoryUri != null) {
+                // Check if we still have permission to the previously selected directory
+                try {
+                    val documentFile = DocumentFile.fromTreeUri(requireContext(), selectedDirectoryUri!!)
+                    if (documentFile?.exists() == true && documentFile.canWrite()) {
+                        Log.d(TAG, "Already have access to selected directory")
+                        return true
+                    } else {
+                        Log.w(TAG, "Lost access to previously selected directory")
+                        selectedDirectoryUri = null
+                        sharedPrefs.edit().remove(PREF_SELECTED_DIRECTORY_URI).apply()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error checking directory access", e)
+                    selectedDirectoryUri = null
+                    sharedPrefs.edit().remove(PREF_SELECTED_DIRECTORY_URI).apply()
+                }
+            }
+            
+            // Request user to select directory
+            Log.d(TAG, "Requesting user to select directory")
+            Snackbar.make(
+                binding.root,
+                "Please select a folder to save recording files",
+                Snackbar.LENGTH_LONG
+            ).setAction("Select Folder") {
+                openDirectoryPicker()
+            }.show()
+            
+            false // Not ready yet, need user to select directory
+        } else {
+            // Android 9 and below: Use legacy permission system
+            Log.d(TAG, "Using legacy permission system for Android 9 and below")
+            
+            val hasPermission = ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            Log.d(TAG, "WRITE_EXTERNAL_STORAGE permission granted: $hasPermission")
+            
+            if (!hasPermission) {
+                val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(
+                    requireActivity(),
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+                Log.d(TAG, "Should show permission rationale: $shouldShowRationale")
+                
+                if (shouldShowRationale) {
+                    Snackbar.make(
+                        binding.root,
+                        "Storage permission is needed to save recording files",
+                        Snackbar.LENGTH_LONG
+                    ).setAction("Grant") {
+                        Log.d(TAG, "User clicked Grant from rationale snackbar")
+                        requestPermission()
+                    }.show()
+                } else {
+                    Log.d(TAG, "Requesting permission directly")
+                    requestPermission()
+                }
+                false
+            } else {
+                Log.d(TAG, "Permission already granted")
+                true
+            }
+        }
+    }
+    
+    private fun openDirectoryPicker() {
+        Log.d(TAG, "Opening directory picker")
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            }
+            selectDirectoryLauncher.launch(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error opening directory picker", e)
+            Snackbar.make(
+                binding.root,
+                "Failed to open directory picker: ${e.message}",
+                Snackbar.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun requestPermission() {
+        Log.d(TAG, "Requesting WRITE_EXTERNAL_STORAGE permission...")
+        try {
+            ActivityCompat.requestPermissions(
+                requireActivity(),
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                REQUEST_WRITE_STORAGE_PERMISSION
+            )
+            Log.d(TAG, "Permission request initiated successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error requesting permission", e)
+            Snackbar.make(
+                binding.root,
+                "Failed to request storage permission: ${e.message}",
+                Snackbar.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        Log.d(TAG, "onRequestPermissionsResult called with requestCode: $requestCode")
+        Log.d(TAG, "Permissions: ${permissions.joinToString()}")
+        Log.d(TAG, "Grant results: ${grantResults.joinToString()}")
+        
+        if (requestCode == REQUEST_WRITE_STORAGE_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Storage permission was granted")
+                // Permission was granted
+                Snackbar.make(binding.root, "Storage permission granted.", Snackbar.LENGTH_SHORT).show()
+                
+                // Re-validate and attempt to start recording now that permission is granted
+                val filename = binding.editFilename.text?.toString()?.trim().orEmpty()
+                Log.d(TAG, "Re-validating after permission grant - filename: '$filename', duration: $recordDurationSec")
+                
+                if (filename.isNotEmpty() && recordDurationSec > 0f && !isRecording && !isCountingDown) {
+                    Log.d(TAG, "Re-validation passed, starting recording sequence")
+                    initiateRecordingSequence(filename)
+                } else if (isRecording || isCountingDown) {
+                    Log.w(TAG, "Cannot start recording - already in progress")
+                    // This case should ideally not be hit if button was disabled, but as a safeguard:
+                    Snackbar.make(binding.root, "Recording or countdown already in progress.", Snackbar.LENGTH_SHORT).show()
+                } else {
+                    Log.w(TAG, "Cannot start recording - validation failed after permission grant")
+                    Snackbar.make(binding.root, "Filename and duration are required to start recording.", Snackbar.LENGTH_SHORT).show()
+                }
+            } else {
+                Log.w(TAG, "Storage permission was denied")
+                // Permission denied
+                Snackbar.make(binding.root, "Storage permission is required to save recordings.", Snackbar.LENGTH_LONG).show()
+            }
+            return
+        } else {
+            Log.d(TAG, "Ignoring permission result for requestCode: $requestCode")
+        }
+    }
+
     private fun loadFileList() {
-        val txtFiles = requireContext().filesDir
-            .listFiles { dir, name -> name.endsWith(".txt") }
+        val sdkVersion = android.os.Build.VERSION.SDK_INT
+        
+        try {
+            if (sdkVersion >= android.os.Build.VERSION_CODES.Q && selectedDirectoryUri != null) {
+                // Load files using SAF for Android 10+
+                loadFileListSAF()
+            } else {
+                // Load files using legacy file system for Android 9 and below
+                loadFileListLegacy()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading file list", e)
+            fileAdapter.submitList(emptyList())
+        }
+    }
+    
+    private fun loadFileListSAF() {
+        val treeUri = selectedDirectoryUri ?: return
+        val documentFile = DocumentFile.fromTreeUri(requireContext(), treeUri) ?: return
+        
+        val txtFiles = documentFile.listFiles()
+            .filter { it.name?.endsWith(".txt") == true }
+            .sortedByDescending { it.lastModified() }
+            .mapNotNull { docFile ->
+                // Convert DocumentFile to a wrapper that implements File-like interface
+                docFile.name?.let { name ->
+                    DocumentFileWrapper(docFile, name)
+                }
+            }
+        
+        fileAdapter.submitList(txtFiles)
+    }
+    
+    private fun loadFileListLegacy() {
+        val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        val txtFiles = documentsDir
+            .listFiles { _, name -> name.endsWith(".txt") }
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()
-        fileAdapter.submitList(txtFiles)
+        fileAdapter.submitList(txtFiles.map { FileWrapper(it) })
+    }
+    
+    // Wrapper classes to provide unified interface for File and DocumentFile
+    abstract class FileItemWrapper {
+        abstract val name: String
+        abstract fun delete(): Boolean
+    }
+    
+    class FileWrapper(private val file: File) : FileItemWrapper() {
+        override val name: String get() = file.name
+        override fun delete(): Boolean = file.delete()
+    }
+    
+    class DocumentFileWrapper(private val documentFile: DocumentFile, override val name: String) : FileItemWrapper() {
+        override fun delete(): Boolean = documentFile.delete()
     }
 
     override fun onResume() {
@@ -431,5 +764,40 @@ class SensorsFragment : Fragment() {
             // Ignore
         }
         mediaPlayer = null
+    }
+
+    private fun loadSelectedDirectory() {
+        val uriString = sharedPrefs.getString(PREF_SELECTED_DIRECTORY_URI, null)
+        selectedDirectoryUri = uriString?.let { Uri.parse(it) }
+        Log.d(TAG, "Loaded selected directory: $selectedDirectoryUri")
+    }
+
+    private fun handleDirectorySelection(uri: Uri) {
+        try {
+            // Take persistent permission for the selected directory
+            requireContext().contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            
+            selectedDirectoryUri = uri
+            sharedPrefs.edit().putString(PREF_SELECTED_DIRECTORY_URI, uri.toString()).apply()
+            
+            Log.d(TAG, "Successfully selected and saved directory: $uri")
+            Snackbar.make(binding.root, "Directory selected successfully", Snackbar.LENGTH_SHORT).show()
+            
+            // Reload file list to show files in the new directory
+            loadFileList()
+            
+            // If user was trying to record, start the recording process now
+            val filename = binding.editFilename.text?.toString()?.trim().orEmpty()
+            if (filename.isNotEmpty() && recordDurationSec > 0f && !isRecording && !isCountingDown) {
+                Log.d(TAG, "Directory selected, now starting recording sequence")
+                initiateRecordingSequence(filename)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling directory selection", e)
+            Snackbar.make(binding.root, "Failed to access selected directory: ${e.message}", Snackbar.LENGTH_LONG).show()
+        }
     }
 }

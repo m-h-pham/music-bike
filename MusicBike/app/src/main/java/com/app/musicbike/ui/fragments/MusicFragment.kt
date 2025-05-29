@@ -1,5 +1,6 @@
 package com.app.musicbike.ui.fragments
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -258,10 +259,20 @@ class MusicFragment : Fragment() {
     private fun observeViewModel() {
         Log.d(TAG, "Setting up ViewModel observers.")
 
-        musicViewModel.isPlaying.observe(viewLifecycleOwner) { playing ->
-            Log.d(TAG, "Observed isPlaying: $playing")
-            binding.toggleButton.text = if (playing) "Pause" else "Play"
-        }
+        musicViewModel.isPlaying.observe(viewLifecycleOwner, Observer { isPlaying ->
+            Log.d(TAG, "isPlaying changed: $isPlaying")
+            binding.toggleButton.text = if (isPlaying) "Pause" else "Play"
+            
+            val serviceIntent = Intent(requireActivity(), MusicService::class.java)
+            if (isPlaying) {
+                serviceIntent.action = MusicService.ACTION_START_INFERENCE
+                Log.d(TAG, "Requesting MusicService to START inference.")
+            } else {
+                serviceIntent.action = MusicService.ACTION_STOP_INFERENCE
+                Log.d(TAG, "Requesting MusicService to STOP inference.")
+            }
+            requireActivity().startService(serviceIntent) // Send command to MusicService
+        })
 
         musicViewModel.currentBankName.observe(viewLifecycleOwner) { bankName ->
             Log.d(TAG, "Observed currentBankName: $bankName")
