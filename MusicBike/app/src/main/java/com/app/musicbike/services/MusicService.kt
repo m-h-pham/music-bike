@@ -68,6 +68,8 @@ class MusicService : Service() {
     private external fun nativePlayFMODEvent()
     private external fun nativeIsFMODPaused(): Boolean
     private external fun nativeStopFMODUpdateThread()
+    private external fun nativeStopFMODPlayback()
+
     // --- End FMOD Native Interface ---
 
     // --- BleService Connection ---
@@ -359,6 +361,7 @@ class MusicService : Service() {
         }
 
         nativeStopFMODUpdateThread()
+        nativeStopFMODPlayback()
         // stopForeground(true) is implicitly handled by stopSelf() if service is stopped,
         // but explicitly calling it in onTaskRemoved is good for immediate notification removal.
         // If onDestroy is called for other reasons while foregrounded, it might also be good here,

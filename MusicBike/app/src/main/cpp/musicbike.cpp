@@ -307,4 +307,35 @@ Java_com_app_musicbike_services_MusicService_nativeStopFMODUpdateThread(
     }
 }
 
+JNIEXPORT void JNICALL
+Java_com_app_musicbike_services_MusicService_nativeStopFMODPlayback(
+        JNIEnv *env,
+        jobject thiz) {
+    std::lock_guard<std::mutex> lock(fmodMutex);
+
+    LOGI("nativeStopFMODPlayback: Stopping FMOD playback and cleaning up...");
+
+    if (eventInstance) {
+        eventInstance->stop(FMOD_STUDIO_STOP_IMMEDIATE);
+        eventInstance->release();
+        eventInstance = nullptr;
+        LOGI("nativeStopFMODPlayback: Event instance stopped and released.");
+    }
+
+    if (studioSystem) {
+        int bankCount = 0;
+        FMOD::Studio::Bank *banks[32];
+        if (studioSystem->getBankList(banks, 32, &bankCount) == FMOD_OK) {
+            for (int i = 0; i < bankCount; ++i) {
+                banks[i]->unload();
+            }
+            LOGI("nativeStopFMODPlayback: Unloaded %d banks.", bankCount);
+        }
+
+        studioSystem->release();
+        studioSystem = nullptr;
+        LOGI("nativeStopFMODPlayback: Studio system released.");
+    }
+}
+
 } // extern "C"
