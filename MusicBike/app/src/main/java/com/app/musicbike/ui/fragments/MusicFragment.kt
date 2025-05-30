@@ -173,12 +173,15 @@ class MusicFragment : Fragment() {
             }
             musicViewModel.setPitchAuto(isChecked)
         }
-        binding.pitchReverseSwitch.setOnCheckedChangeListener { _, isChecked -> // isChecked here is the new state of the switch
-            // We call toggle which will invert the current ViewModel state.
-            // The actual checked state of the switch will be set by observing the LiveData.
-            musicViewModel.togglePitchSignalReversal()
-            Log.d(TAG, "Pitch Reverse Switch UI toggled by user. New desired state (from isChecked): $isChecked")
+        binding.pitchReverseSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (musicViewModel.isPitchSignalReversed.value != isChecked) {
+                musicViewModel.togglePitchSignalReversal()
+                Log.d(TAG, "Pitch Reverse Switch toggled to: $isChecked")
+            } else {
+                Log.d(TAG, "Pitch Reverse Switch state unchanged, ignoring toggle.")
+            }
         }
+
         // Set initial enabled state for pitchReverseSwitch based on current "Auto Pitch" mode state
         binding.pitchReverseSwitch.isEnabled = musicViewModel.isPitchAuto.value ?: false
 
