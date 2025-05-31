@@ -220,9 +220,11 @@ class SensorsFragment : Fragment() {
         mediaPlayer = null
         // Play sound at 3, 2, 1 in countdown
         val soundResId = when (secondValue) {
-            3 -> R.raw.tone_beep_slow
-            2 -> R.raw.tone_beep_slow
-            1 -> R.raw.tone_beep_slow
+            5 -> R.raw.tone_beep
+            4 -> R.raw.tone_beep
+            3 -> R.raw.tone_beep
+            2 -> R.raw.tone_beep
+            1 -> R.raw.tone_beep
             else -> 0 // No sound defined
         }
         if (soundResId != 0) {
