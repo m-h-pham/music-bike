@@ -1,5 +1,6 @@
 package com.app.musicbike.ui.fragments
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -34,6 +35,38 @@ class MusicFragment : Fragment() {
     private var isPitchAutoUi = false
     private var isEventAutoUi = false
     private var isHallDirectionAutoUi = false
+
+    private val inferenceReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val prediction = intent?.getStringExtra("prediction") ?: return
+            Log.d(TAG, "Received inference broadcast: $prediction")
+
+            if (musicViewModel.isEventAuto.value == true) {
+                val eventValue = when (prediction.uppercase(Locale.US)) {
+                    "180" -> 3f
+                    else -> 0f
+                }
+                musicViewModel.setFmodParameter("Event", eventValue)
+                Log.d(TAG, "Set Event parameter to $eventValue")
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "onResume: Registering inferenceReceiver")
+        androidx.localbroadcastmanager.content.LocalBroadcastManager
+            .getInstance(requireContext())
+            .registerReceiver(inferenceReceiver, android.content.IntentFilter("INFERENCE_RESULT"))
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d(TAG, "onPause: Unregistering inferenceReceiver")
+        androidx.localbroadcastmanager.content.LocalBroadcastManager
+            .getInstance(requireContext())
+            .unregisterReceiver(inferenceReceiver)
+    }
 
     private fun isBleConnected(): Boolean {
         val mainActivity = activity as? MainActivity
@@ -187,7 +220,7 @@ class MusicFragment : Fragment() {
 
 
         // Event
-        val events = arrayOf("None", "Jump", "Drop")
+        val events = arrayOf("None", "Jump", "Drop", "180")
         val eventAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, events)
         binding.eventSpinner.adapter = eventAdapter
         binding.eventSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {

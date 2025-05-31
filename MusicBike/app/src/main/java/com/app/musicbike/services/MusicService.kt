@@ -166,6 +166,7 @@ class MusicService : Service() {
             val eventValue = when (event.uppercase(java.util.Locale.US)) {
                 "JUMP" -> 1.0f
                 "DROP" -> 2.0f
+                "180"  -> 3.0f
                 else -> -1.0f
             }
             if (eventValue != -1.0f) {

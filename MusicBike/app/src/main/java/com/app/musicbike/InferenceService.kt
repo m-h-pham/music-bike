@@ -37,6 +37,8 @@ class InferenceService : Service() {
     private var serviceLooper: Looper? = null
     private var serviceHandler: ServiceHandler? = null
     private lateinit var tflite: Interpreter
+    private val classLabels = listOf("None", "180")
+
     private val TFLITE_MODEL_FILENAME = "your_model.tflite" // Replace with your model filename
     private val TAG = "InferenceService"
 
@@ -263,7 +265,7 @@ class InferenceService : Service() {
     // --- Process Output ---
     private fun processOutput(outputBuffer: ByteBuffer, inferenceTime: Long) {
         Log.d(TAG, "Processing output...")
-        
+
         val outputShape = tflite.getOutputTensor(0).shape()
         val outputDataType = tflite.getOutputTensor(0).dataType()
 
@@ -272,32 +274,44 @@ class InferenceService : Service() {
                 val outputSize = outputShape.reduce { acc, i -> acc * i }
                 val results = FloatArray(outputSize)
                 outputBuffer.asFloatBuffer().get(results)
-                
-                // Process results based on your model's output format
+
                 Log.d(TAG, "Inference results: ${results.joinToString(limit = 10)}")
-                
-                // Example: If it's a classification model
+
+                // Find the index of the highest probability
                 if (results.size > 1) {
                     val maxIndex = results.indices.maxByOrNull { results[it] } ?: -1
-                    val confidence = if (maxIndex >= 0) results[maxIndex] else 0f
-                    sendResultToClient("Prediction: Class $maxIndex, Confidence: $confidence, Time: ${inferenceTime}ms")
+                    val confidence = results.getOrNull(maxIndex) ?: 0f
+                    val predictedLabel = classLabels.getOrNull(maxIndex) ?: "Unknown"
+
+                    Log.d(TAG, "Predicted: $predictedLabel with confidence $confidence")
+
+                    if (confidence > 0.7f && predictedLabel != "None") {
+                        val intent = Intent("INFERENCE_RESULT")
+                        intent.putExtra("prediction", predictedLabel)
+                        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+                        Log.d(TAG, "Broadcasted: $predictedLabel")
+                    }
+
+                    sendResultToClient("Prediction: $predictedLabel ($confidence), Time: ${inferenceTime}ms")
                 } else {
-                    // Single output value
-                    sendResultToClient("Result: ${results[0]}, Time: ${inferenceTime}ms")
+                    sendResultToClient("Unexpected output shape: only one value")
                 }
             }
+
             org.tensorflow.lite.DataType.UINT8 -> {
                 val bytes = ByteArray(outputShape.reduce { acc, i -> acc * i })
                 outputBuffer.get(bytes)
                 Log.d(TAG, "UINT8 Output length: ${bytes.size}")
                 sendResultToClient("UINT8 result received. Length: ${bytes.size}, Time: ${inferenceTime}ms")
             }
+
             else -> {
                 Log.e(TAG, "Unsupported output data type: $outputDataType")
                 sendResultToClient("Error: Unsupported output data type")
             }
         }
     }
+
 
     // --- Send results back to client ---
     private fun sendResultToClient(result: String) {
