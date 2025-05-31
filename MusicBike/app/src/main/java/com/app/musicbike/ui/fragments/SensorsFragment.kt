@@ -37,6 +37,7 @@ import androidx.core.content.ContextCompat
 // For Storage Access Framework
 import android.content.Intent
 import android.content.SharedPreferences
+import android.media.AudioAttributes
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
@@ -106,7 +107,7 @@ class SensorsFragment : Fragment() {
         loadSelectedDirectory()
 
         // Initialize the slider (0..50 steps → 0.0..5.0s in 0.1s increments)
-        binding.seekRecordingDuration.max = 50 // Example: 50 * 0.1f = 5.0 seconds max
+        binding.seekRecordingDuration.max = 100 // Example: 100 * 0.1f = 10.0 seconds max
         binding.seekRecordingDuration.progress = 0
         binding.txtDurationValue.text = "0.0"
 
@@ -184,7 +185,7 @@ class SensorsFragment : Fragment() {
     private fun initiateRecordingSequence(filename: String) {
         isCountingDown = true
         binding.btnStartRecording.isEnabled = false
-        val countdownDurationMillis = 5000L // 5 seconds
+        val countdownDurationMillis = 10000L // 10 seconds
         val countDownIntervalMillis = 1000L  // 1 second
 
         countdownTimer = object : CountDownTimer(countdownDurationMillis, countDownIntervalMillis) {
@@ -192,6 +193,8 @@ class SensorsFragment : Fragment() {
                 val secondsRemaining = millisUntilFinished / 1000
                 binding.btnStartRecording.text = "Starting in ${secondsRemaining}s..."
                 when (secondsRemaining.toInt()) {
+                    5 -> playCountdownSound(2)
+                    4 -> playCountdownSound(1)
                     3 -> playCountdownSound(3)
                     2 -> playCountdownSound(2)
                     1 -> playCountdownSound(1)
@@ -230,6 +233,16 @@ class SensorsFragment : Fragment() {
         if (soundResId != 0) {
             try {
                 mediaPlayer = MediaPlayer.create(requireContext(), soundResId)
+                // Set volume to maximum (1.0f = 100% for both left and right channels)
+                mediaPlayer?.setVolume(1.0f, 1.0f)
+                
+                // Set audio attributes to ensure it plays on the media stream
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                mediaPlayer?.setAudioAttributes(audioAttributes)
+
                 mediaPlayer?.setOnCompletionListener { mp ->
                     Log.d(TAG, "Sound playback completed for $secondValue.")
                     mp.release()
